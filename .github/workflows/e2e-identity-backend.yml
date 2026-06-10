@@ -1,0 +1,335 @@
+name: Identity Backend E2E Test
+
+on:
+  workflow_call:
+    inputs:
+      app_hash:
+        description: "Content hash of app image inputs (tagged as sha-<hash> on GHCR)"
+        required: true
+        type: string
+      chopsticks_hash:
+        description: "Content hash of chopsticks image inputs (tagged as sha-<hash> on GHCR)"
+        required: true
+        type: string
+      enable_memory_probe:
+        description: "Run the memory-probe test and capture heap snapshots"
+        required: false
+        type: boolean
+        default: false
+  workflow_dispatch:
+    inputs:
+      app_hash:
+        description: "Content hash of app image inputs"
+        required: true
+        type: string
+      chopsticks_hash:
+        description: "Content hash of chopsticks image inputs"
+        required: true
+        type: string
+      enable_memory_probe:
+        description: "Run the memory-probe test and capture heap snapshots"
+        required: false
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+  packages: read
+
+jobs:
+  prewarm-compose-images:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/install-docker-compose
+      - uses: ./.github/actions/cache-images
+        with:
+          compose-file: docker/test/integration/docker-compose.yml
+      - uses: ./.github/actions/cache-images
+        with:
+          images: |
+            otel/opentelemetry-collector-contrib:0.150.1
+            alpine
+
+  run-e2e-tests:
+    needs: prewarm-compose-images
+    runs-on: ubuntu-latest
+    timeout-minutes: 12
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5]
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/install-apt-packages
+        with:
+          packages: netcat-traditional gcc g++ make unzip
+
+      - uses: ./.github/actions/install-deps
+      - uses: ./.github/actions/install-docker-compose
+
+      - uses: ./.github/actions/cache-images
+        with:
+          compose-file: docker/test/integration/docker-compose.yml
+
+      - uses: ./.github/actions/cache-images
+        with:
+          images: |
+            otel/opentelemetry-collector-contrib:0.150.1
+            alpine
+
+      - run: corepack pnpm exec turbo build --filter=identity-backend-e2e...
+
+      - name: Check for cached e2e images in local daemon
+        id: image-check
+        run: |
+          if docker image inspect \
+               identity-backend:e2e-latest \
+               identity-backend-startup:e2e-latest \
+               chopsticks:e2e-latest >/dev/null 2>&1; then
+            echo "all e2e images already in docker daemon, skipping GHCR pull"
+            echo "need-fetch=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "at least one e2e image missing, will pull from GHCR"
+            echo "need-fetch=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - uses: docker/login-action@v4
+        if: steps.image-check.outputs.need-fetch == 'true'
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - name: Pull e2e images from GHCR and retag
+        id: pull-images
+        if: steps.image-check.outputs.need-fetch == 'true'
+        env:
+          GHCR_APP_IDENTITY: ghcr.io/${{ github.repository }}/ci-cache-app-identity:sha-${{ inputs.app_hash }}
+          GHCR_APP_E2E: ghcr.io/${{ github.repository }}/ci-cache-app-e2e:sha-${{ inputs.app_hash }}
+          GHCR_CHOPSTICKS: ghcr.io/${{ github.repository }}/ci-cache-chopsticks:sha-${{ inputs.chopsticks_hash }}
+        run: |
+          set -u
+          rebuild_app=false
+          rebuild_chopsticks=false
+
+          if docker pull "$GHCR_APP_IDENTITY" && docker pull "$GHCR_APP_E2E"; then
+            docker tag "$GHCR_APP_IDENTITY" identity-backend:e2e-latest
+            docker tag "$GHCR_APP_E2E"      identity-backend-startup:e2e-latest
+          else
+            echo "::warning::GHCR pull failed for app images — will rebuild locally"
+            rebuild_app=true
+          fi
+
+          if docker pull "$GHCR_CHOPSTICKS"; then
+            docker tag "$GHCR_CHOPSTICKS" chopsticks:e2e-latest
+          else
+            echo "::warning::GHCR pull failed for chopsticks — will rebuild locally"
+            rebuild_chopsticks=true
+          fi
+
+          echo "rebuild-app=$rebuild_app" >> "$GITHUB_OUTPUT"
+          echo "rebuild-chopsticks=$rebuild_chopsticks" >> "$GITHUB_OUTPUT"
+
+      - name: Rebuild chopsticks locally (GHCR image missing)
+        if: steps.pull-images.outputs.rebuild-chopsticks == 'true'
+        uses: ./.github/actions/docker-build
+        with:
+          file: docker/test/e2e/chopsticks.dockerfile
+          tags: chopsticks:e2e-latest
+          cache-scope: chopsticks-image
+          load: "true"
+          cache-export: "false"
+
+      - name: Rebuild app images locally (GHCR image missing)
+        id: rebuild-app
+        if: steps.pull-images.outputs.rebuild-app == 'true'
+        uses: ./.github/actions/build-images
+        with:
+          push: "false"
+          version: e2e-fallback
+          vcs-ref: ${{ github.sha }}
+
+      - name: Retag rebuilt app images
+        if: steps.pull-images.outputs.rebuild-app == 'true'
+        run: |
+          docker tag "${{ steps.rebuild-app.outputs.app-tag }}" identity-backend:e2e-latest
+          docker tag "${{ steps.rebuild-app.outputs.startup-tag }}" identity-backend-startup:e2e-latest
+
+      - name: Start integration services
+        run: docker compose -f docker/test/integration/docker-compose.yml up -d
+        env:
+          COMPOSE_DOCKER_CLI_BUILD: 1
+          DOCKER_BUILDKIT: 1
+
+      - name: Wait for IntegreSQL to be ready
+        run: |
+          while ! nc -z localhost 5000; do
+            echo "Waiting for IntegreSQL to be ready..."
+            sleep 1
+          done
+          echo "IntegreSQL is ready"
+
+      - name: Start container death-log collector
+        run: |
+          mkdir -p /tmp/container-death-logs
+          # Tail every container from start so logs accumulate on disk before
+          # `docker rm` runs. Reactive die-event capture loses the race when
+          # testcontainers tears down a compose project (~500ms window) — by
+          # the time `docker logs $id` forks, the json-log file is gone.
+          # `{{.Actor.ID}}` is the correct field; `{{.ID}}` is unset on
+          # *events.Message in Docker 29.x.
+          nohup bash -c '
+            start_tail() {
+              local id="$1" name="$2"
+              ( docker logs --follow --timestamps "$id" \
+                  > "/tmp/container-death-logs/${name}-${id:0:12}.log" 2>&1 ) &
+            }
+            for id in $(docker ps -q); do
+              name=$(docker inspect --format "{{.Name}}" "$id" 2>/dev/null | sed "s|^/||")
+              [ -n "$name" ] && start_tail "$id" "$name"
+            done
+            ( docker events --filter type=container --filter event=start \
+                --format "{{.Actor.ID}}|{{.Actor.Attributes.name}}" \
+              | while IFS="|" read -r id name; do
+                  start_tail "$id" "$name"
+                done
+            ) &
+            docker events --filter type=container --filter event=die \
+              --format "{{.Actor.ID}}|{{.Actor.Attributes.name}}|{{.Actor.Attributes.exitCode}}" \
+            | while IFS="|" read -r id name exitcode; do
+                sleep 0.3
+                old="/tmp/container-death-logs/${name}-${id:0:12}.log"
+                new="/tmp/container-death-logs/${name}-${id:0:12}-exit${exitcode}.log"
+                [ -f "$old" ] && mv "$old" "$new" 2>/dev/null
+              done
+          ' > /tmp/death-collector.out 2>&1 &
+          echo $! > /tmp/death-collector.pid
+          echo "death log collector pid $(cat /tmp/death-collector.pid)"
+
+      - name: Run Identity Backend E2E tests (shard ${{ matrix.shard }}/5)
+        id: run-tests
+        uses: nick-fields/retry@v4
+        with:
+          timeout_minutes: 12
+          max_attempts: 2
+          warning_on_retry: false
+          command: corepack pnpm --filter identity-backend-e2e exec vitest run tests --shard=${{ matrix.shard }}/5
+        env:
+          NODE_OPTIONS: "--max-old-space-size=8192"
+          OTEL_ENABLED: "true"
+          E2E_OTEL_CONTAINER: "e2e-otel-collector-${{ matrix.shard }}"
+          E2E_OTEL_VOLUME: "e2e-traces-${{ matrix.shard }}"
+          OTEL_COLLECTOR_HOST_PORT: "4318${{ matrix.shard }}"
+          OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318${{ matrix.shard }}"
+          E2E_MEMORY_PROBE: ${{ inputs.enable_memory_probe && 'true' || 'false' }}
+          E2E_HEAPDUMP_ENABLED: ${{ inputs.enable_memory_probe && 'true' || 'false' }}
+          E2E_HEAPSNAPSHOTS_DIR: apps/identity-backend-e2e/.heapsnapshots
+          DEBUG_HEAPDUMP_ENABLED: ${{ inputs.enable_memory_probe && 'true' || 'false' }}
+          DEBUG_HEAPDUMP_COOLDOWN_SECONDS: "5"
+
+      - name: Dump container logs on failure
+        if: failure()
+        continue-on-error: true
+        run: |
+          echo "=== still-present containers ==="
+          docker ps -a --format "table {{.Names}}\t{{.Image}}\t{{.Status}}\t{{.RunningFor}}" || true
+          echo ""
+          for c in $(docker ps -aq); do
+            name=$(docker inspect --format '{{.Name}}' "$c" | sed 's|^/||')
+            exit_code=$(docker inspect --format '{{.State.ExitCode}}' "$c")
+            finished=$(docker inspect --format '{{.State.FinishedAt}}' "$c")
+            echo "======================================================================"
+            echo "=== $name  (exit $exit_code, finished $finished)"
+            echo "======================================================================"
+            docker logs "$c" 2>&1 | tail -120 || true
+            echo ""
+          done
+
+          echo ""
+          echo "=== death-collector own stderr (debug) ==="
+          cat /tmp/death-collector.out 2>&1 || echo "no death-collector.out"
+          echo ""
+          echo "=== captured logs from containers that died during tests ==="
+          ls -la /tmp/container-death-logs/ 2>&1 || true
+          for f in /tmp/container-death-logs/*.log /tmp/container-death-logs/*.err; do
+            [ -f "$f" ] || continue
+            echo "======================================================================"
+            echo "=== $(basename "$f")"
+            echo "======================================================================"
+            tail -200 "$f"
+            echo ""
+          done
+
+      - name: Archive OTEL traces
+        if: always()
+        continue-on-error: true
+        env:
+          E2E_OTEL_CONTAINER: "e2e-otel-collector-${{ matrix.shard }}"
+          E2E_OTEL_VOLUME: "e2e-traces-${{ matrix.shard }}"
+        run: |
+          have_traces=$(docker run --rm -v "${E2E_OTEL_VOLUME}:/traces:ro" alpine sh -c 'ls -A /traces 2>/dev/null | grep -v archive.tar.gz | head -1')
+          if [ -z "$have_traces" ]; then
+            echo "no trace files captured; skipping archive"
+            exit 0
+          fi
+          docker run --rm -v "${E2E_OTEL_VOLUME}:/traces" alpine sh -c \
+            'cd /traces && tar czf /traces/archive.tar.gz --exclude=archive.tar.gz .'
+          docker cp "${E2E_OTEL_CONTAINER}:/traces/archive.tar.gz" \
+            "e2e-telemetry-${{ matrix.shard }}.tar.gz"
+          ls -la "e2e-telemetry-${{ matrix.shard }}.tar.gz"
+
+      - name: Upload blob report
+        if: ${{ !cancelled() }}
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: blob-report-${{ matrix.shard }}
+          path: apps/identity-backend-e2e/.vitest-reports/*
+          include-hidden-files: true
+          retention-days: 1
+          if-no-files-found: warn
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        continue-on-error: true
+        with:
+          name: e2e-telemetry-${{ matrix.shard }}
+          path: e2e-telemetry-${{ matrix.shard }}.tar.gz
+          retention-days: 7
+          if-no-files-found: ignore
+
+      - name: Upload heap snapshots
+        if: always() && inputs.enable_memory_probe
+        continue-on-error: true
+        uses: actions/upload-artifact@v7
+        with:
+          name: e2e-heapsnapshots-${{ matrix.shard }}
+          path: apps/identity-backend-e2e/.heapsnapshots/*
+          retention-days: 7
+          if-no-files-found: ignore
+
+  merge-reports:
+    if: ${{ !cancelled() }}
+    needs: run-e2e-tests
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    continue-on-error: true
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/install-deps
+
+      - name: Download blob reports
+        uses: actions/download-artifact@v8
+        with:
+          path: apps/identity-backend-e2e/.vitest-reports
+          pattern: blob-report-*
+          merge-multiple: true
+
+      - name: Merge reports
+        run: |
+          corepack pnpm --filter identity-backend-e2e \
+            exec vitest --merge-reports --reporter=github-actions

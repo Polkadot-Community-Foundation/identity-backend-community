@@ -1,0 +1,36 @@
+name: Playwright Test
+
+on:
+  workflow_call:
+  workflow_dispatch:
+
+jobs:
+  playwright-test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      success: ${{ steps.run-tests.outputs.success }}
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/install-deps
+
+      - name: Install Playwright browsers
+        run: |
+          cd apps/api-docs
+          corepack pnpm playwright install --with-deps
+
+      - run: corepack pnpm run build
+
+      - name: Run Playwright tests
+        id: run-tests
+        run: corepack pnpm -F @polkadot-app/api-docs test:playwright
+        env:
+          CI: true
+
+      - uses: actions/upload-artifact@v7
+        if: always()
+        continue-on-error: true
+        with:
+          name: playwright-results
+          path: apps/api-docs/playwright-report/
+          retention-days: 30

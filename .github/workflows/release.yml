@@ -1,0 +1,129 @@
+name: Build & Release
+
+on:
+  push:
+    branches:
+      - main
+      - dev
+  release:
+    types: [published]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: write
+  packages: write
+  pull-requests: write
+  issues: write
+
+jobs:
+  build-images:
+    name: Build
+    uses: ./.github/workflows/reusable-build-images.yml
+
+  checks:
+    name: Build
+    uses: ./.github/workflows/reusable-checks.yml
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+
+  test-e2e-identity-backend:
+    name: Test Identity Backend E2E
+    needs: [build-images]
+    uses: ./.github/workflows/e2e-identity-backend.yml
+    with:
+      app_hash: ${{ needs.build-images.outputs.app_hash }}
+      chopsticks_hash: ${{ needs.build-images.outputs.chopsticks_hash }}
+
+  check-e2e-success:
+    name: Check E2E Success
+    needs: [test-e2e-identity-backend]
+    runs-on: ubuntu-latest
+    if: always()
+    steps:
+      - name: Check if E2E tests succeeded
+        run: |
+          identity_result="${{ needs.test-e2e-identity-backend.result }}"
+
+          echo "Identity Backend E2E: $identity_result"
+
+          if [[ "$identity_result" == "success" ]]; then
+            echo "✓ All E2E tests succeeded!"
+            exit 0
+          else
+            echo "✗ E2E tests failed!"
+            exit 1
+          fi
+
+  semantic-release:
+    name: Semantic Release
+    needs: [build-images, checks, check-e2e-success]
+    if: github.ref == 'refs/heads/main' && needs.check-e2e-success.result == 'success'
+    runs-on: ubuntu-latest
+    outputs:
+      new_tag: ${{ steps.release.outputs.new_tag }}
+    env:
+      HUSKY: 0
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 0
+          token: ${{ secrets.GITHUB_TOKEN }}
+
+      - uses: ./.github/actions/setup-node-runtime
+      - uses: ./.github/actions/setup-pnpm-store
+      - run: corepack pnpm install --frozen-lockfile=false
+
+      - name: Run semantic-release
+        id: release
+        env:
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          # Capture the latest tag before release
+          latest_tag_before=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Latest tag before release: $latest_tag_before"
+
+          pnpm exec semantic-release
+
+          # Fetch tags from remote to ensure we see what semantic-release pushed
+          git fetch --tags origin
+
+          # Capture the latest tag after release
+          latest_tag_after=$(git describe --tags --abbrev=0 2>/dev/null || echo "")
+          echo "Latest tag after release: $latest_tag_after"
+
+          if [ "$latest_tag_before" != "$latest_tag_after" ] && [ -n "$latest_tag_after" ]; then
+            echo "new_tag=$latest_tag_after" >> "$GITHUB_OUTPUT"
+            echo "✓ New tag created: $latest_tag_after"
+          else
+            echo "new_tag=" >> "$GITHUB_OUTPUT"
+            echo "No new tag created"
+          fi
+
+  publish-image:
+    name: Publish Image
+    needs: [build-images, semantic-release]
+    if: github.ref == 'refs/heads/main' && needs.semantic-release.outputs.new_tag != ''
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      IMAGE_NAME: ${{ github.event.repository.name }}
+      VERSION: ${{ needs.build-images.outputs.tag }}
+      GAR_REGISTRY: "us-docker.pkg.dev/polkadot-community-foundation/identity-backend"
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/gar-auth
+        with:
+          service-account: ${{ secrets.GCP_SA_GITHUB }}
+          workload-identity-provider: ${{ secrets.GCP_WIP_GITHUB }}
+
+      - uses: ./.github/actions/build-images
+        with:
+          push: "true"
+          version: ${{ needs.build-images.outputs.tag }}
+          gar-registry: ${{ env.GAR_REGISTRY }}
+          vcs-ref: ${{ github.sha }}

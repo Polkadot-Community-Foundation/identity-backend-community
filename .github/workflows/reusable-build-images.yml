@@ -1,0 +1,137 @@
+name: Build Images
+
+on:
+  workflow_call:
+    inputs:
+      GAR_REGISTRY:
+        type: string
+        default: "us-docker.pkg.dev/polkadot-community-foundation/identity-backend"
+    outputs:
+      tag:
+        value: ${{ jobs.build-image.outputs.tag }}
+      app_hash:
+        value: ${{ jobs.build-image.outputs.hash }}
+      chopsticks_hash:
+        value: ${{ jobs.build-chopsticks.outputs.hash }}
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  build-chopsticks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    outputs:
+      hash: ${{ steps.image-hash.outputs.hash }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: image-hash
+        uses: ./.github/actions/compute-chopsticks-image-hash
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: ghcr-check
+        name: Check GHCR for existing content-hash tag
+        env:
+          GHCR_TAG: ghcr.io/${{ github.repository }}/ci-cache-chopsticks:sha-${{ steps.image-hash.outputs.hash }}
+        run: |
+          if docker buildx imagetools inspect "$GHCR_TAG" >/dev/null 2>&1; then
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+            echo "✓ cache hit: $GHCR_TAG"
+          else
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+            echo "✗ cache miss: $GHCR_TAG — will build"
+          fi
+
+      - if: steps.ghcr-check.outputs.hit != 'true'
+        uses: ./.github/actions/setup-pnpm-store
+
+      - if: steps.ghcr-check.outputs.hit != 'true'
+        uses: ./.github/actions/docker-build
+        with:
+          file: docker/test/e2e/chopsticks.dockerfile
+          tags: chopsticks:e2e-latest
+          cache-scope: chopsticks-image
+          load: "true"
+
+      - if: steps.ghcr-check.outputs.hit != 'true'
+        name: Push chopsticks to GHCR
+        env:
+          GHCR_TAG: ghcr.io/${{ github.repository }}/ci-cache-chopsticks:sha-${{ steps.image-hash.outputs.hash }}
+        run: |
+          docker tag chopsticks:e2e-latest "$GHCR_TAG"
+          docker push "$GHCR_TAG"
+
+  build-image:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    outputs:
+      tag: ${{ steps.version.outputs.version }}
+      hash: ${{ steps.image-hash.outputs.hash }}
+    env:
+      IMAGE_NAME: ${{ github.event.repository.name }}
+      GAR_REGISTRY: ${{ inputs.GAR_REGISTRY }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - id: version
+        shell: bash
+        run: |
+          if [ "${{ github.ref_type }}" = "tag" ]; then
+            VERSION="${{ github.ref_name }}"
+          else
+            VERSION="$(date -u '+%Y%m%d-%H%M%S')-${GITHUB_SHA::8}"
+          fi
+          echo "version=$VERSION" >> "$GITHUB_OUTPUT"
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/install-deps
+
+      - id: image-hash
+        uses: ./.github/actions/compute-app-image-hash
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      - id: ghcr-check
+        name: Check GHCR for existing content-hash tags
+        env:
+          GHCR_APP_IDENTITY: ghcr.io/${{ github.repository }}/ci-cache-app-identity:sha-${{ steps.image-hash.outputs.hash }}
+          GHCR_APP_E2E: ghcr.io/${{ github.repository }}/ci-cache-app-e2e:sha-${{ steps.image-hash.outputs.hash }}
+        run: |
+          if docker buildx imagetools inspect "$GHCR_APP_IDENTITY" >/dev/null 2>&1 \
+             && docker buildx imagetools inspect "$GHCR_APP_E2E" >/dev/null 2>&1; then
+            echo "hit=true" >> "$GITHUB_OUTPUT"
+            echo "✓ cache hit: both app-identity and app-e2e at sha-${{ steps.image-hash.outputs.hash }}"
+          else
+            echo "hit=false" >> "$GITHUB_OUTPUT"
+            echo "✗ cache miss — will bake + push"
+          fi
+
+      - if: steps.ghcr-check.outputs.hit != 'true'
+        uses: ./.github/actions/build-images
+        with:
+          push: "false"
+          version: ${{ env.VERSION }}
+          gar-registry: ${{ inputs.GAR_REGISTRY }}
+          vcs-ref: ${{ github.sha }}
+
+      - if: steps.ghcr-check.outputs.hit != 'true'
+        name: Push app images to GHCR
+        env:
+          GHCR_APP_IDENTITY: ghcr.io/${{ github.repository }}/ci-cache-app-identity:sha-${{ steps.image-hash.outputs.hash }}
+          GHCR_APP_E2E: ghcr.io/${{ github.repository }}/ci-cache-app-e2e:sha-${{ steps.image-hash.outputs.hash }}
+        run: |
+          docker tag "${GAR_REGISTRY}/${IMAGE_NAME}:${VERSION}" "$GHCR_APP_IDENTITY"
+          docker tag "${GAR_REGISTRY}/${IMAGE_NAME}:e2e-startup-${VERSION}" "$GHCR_APP_E2E"
+          docker push "$GHCR_APP_IDENTITY"
+          docker push "$GHCR_APP_E2E"

@@ -1,0 +1,98 @@
+name: Cleanup GHCR Cached Images
+
+on:
+  schedule:
+    - cron: "0 0 * * *"
+  workflow_dispatch:
+    inputs:
+      days:
+        description: "Delete images older than N days"
+        required: false
+        default: "7"
+        type: string
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  cleanup:
+    name: Delete cached images older than ${{ github.event.inputs.days || vars.CLEANUP_GHCR_DAYS || 3 }} days
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Install gh CLI
+        uses: ./.github/actions/install-apt-packages
+        with:
+          packages: gh
+
+      - name: Delete old ci-cache-* tags
+        env:
+          GH_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+          OWNER: ${{ github.repository_owner }}
+          REPO_NAME: ${{ github.event.repository.name }}
+          DAYS: ${{ github.event.inputs.days || vars.CLEANUP_GHCR_DAYS || 3 }}
+        run: |
+          set -euo pipefail
+
+          cutoff=$(date -u -d "${DAYS} days ago" '+%Y-%m-%dT%H:%M:%SZ')
+          owner_lc="${OWNER,,}"
+          repo_lc="${REPO_NAME,,}"
+
+          for pkg in ci-cache-chopsticks ci-cache-app-identity ci-cache-app-e2e; do
+            echo "::group::Cleaning $pkg"
+
+            pkg_path="${repo_lc}%2F${pkg}"
+            total=0
+            deleted=0
+            page=1
+
+            stale_ids=()
+
+            while true; do
+              resp=$(gh api \
+                "/orgs/${owner_lc}/packages/container/${pkg_path}/versions?per_page=100&page=${page}" \
+                --jq '.[] | {id: .id, updated: .updated_at}')
+
+              if [ -z "$resp" ]; then
+                break
+              fi
+
+              while IFS= read -r line; do
+                [ -z "$line" ] && continue
+                total=$((total + 1))
+                id=$(echo "$line" | jq -r '.id')
+                updated=$(echo "$line" | jq -r '.updated')
+
+                if [[ "$updated" < "$cutoff" ]]; then
+                  stale_ids+=("$id:$updated")
+                fi
+              done <<< "$resp"
+
+              page=$((page + 1))
+            done
+
+            # Always keep at least one version — GitHub rejects deletion of the last one
+            if [ "${#stale_ids[@]}" -eq "$total" ] && [ "$total" -gt 0 ]; then
+              echo "All $total version(s) are stale; keeping newest to avoid orphaned package"
+              unset 'stale_ids[-1]'
+            fi
+
+            for entry in "${stale_ids[@]}"; do
+              id="${entry%%:*}"
+              updated="${entry#*:}"
+              echo "Deleting version $id (updated $updated)"
+              gh api \
+                --method DELETE \
+                "/orgs/${owner_lc}/packages/container/${pkg_path}/versions/${id}" \
+                --silent
+              deleted=$((deleted + 1))
+            done
+
+            echo "Scanned $total version(s), deleted $deleted older than $cutoff"
+            echo "::endgroup::"
+          done
+
+          echo "Done."

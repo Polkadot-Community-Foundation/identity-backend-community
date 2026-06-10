@@ -1,0 +1,60 @@
+name: Build & Test
+
+on:
+  pull_request:
+    branches: [dev, main]
+
+concurrency:
+  group: ${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
+jobs:
+  build-images:
+    name: Build
+    uses: ./.github/workflows/reusable-build-images.yml
+
+  checks:
+    name: Build
+    uses: ./.github/workflows/reusable-checks.yml
+    secrets:
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+
+  test-e2e-identity-backend:
+    name: Test Identity Backend E2E
+    needs: [build-images]
+    uses: ./.github/workflows/e2e-identity-backend.yml
+    with:
+      app_hash: ${{ needs.build-images.outputs.app_hash }}
+      chopsticks_hash: ${{ needs.build-images.outputs.chopsticks_hash }}
+
+  check-e2e-success:
+    name: Check E2E Success
+    needs: [test-e2e-identity-backend]
+    if: always()
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check if E2E suite succeeded
+        run: |
+          identity_result="${{ needs.test-e2e-identity-backend.result }}"
+          echo "Identity E2E job result: $identity_result"
+
+          if [[ "$identity_result" == "success" ]]; then
+            echo "✓ All E2E shards succeeded!"
+            exit 0
+          else
+            echo "✗ At least one E2E shard failed (result: $identity_result)"
+            exit 1
+          fi
+
+  all:
+    needs: [build-images, checks, test-e2e-identity-backend]
+    timeout-minutes: 5
+    runs-on: ubuntu-latest
+    steps:
+      - run: echo "All jobs completed successfully"
