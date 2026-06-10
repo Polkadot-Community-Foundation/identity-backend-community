@@ -1,0 +1,1 @@
+ALTER TYPE "public"."people_network" ADD VALUE 'polkadot';

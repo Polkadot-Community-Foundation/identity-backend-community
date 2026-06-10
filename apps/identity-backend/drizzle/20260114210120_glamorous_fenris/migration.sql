@@ -1,0 +1,1 @@
+ALTER TABLE "polkadot_app"."individuality_usernames" ADD COLUMN "full_username" text;

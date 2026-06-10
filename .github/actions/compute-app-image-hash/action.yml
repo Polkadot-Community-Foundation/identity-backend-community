@@ -1,0 +1,22 @@
+name: Compute App Image Hash
+description: |
+  Content hash for the app images (app-identity + app-e2e). Single source of
+  truth for the app hash inputs; consumed by both the build and load-test
+  workflows so they can never disagree. Requires pnpm/turbo to be set up first.
+
+outputs:
+  hash:
+    description: 16-char hex content hash
+    value: ${{ steps.hash.outputs.hash }}
+
+runs:
+  using: composite
+  steps:
+    - id: hash
+      uses: ./.github/actions/compute-image-hash
+      with:
+        turbo-filters: identity-backend-container,identity-backend-e2e-people-startup-container,@polkadot-app/api-docs
+        paths: |
+          Dockerfile
+          .dockerignore
+          docker-bake.hcl

@@ -1,0 +1,282 @@
+@import "tailwindcss";
+@import "tw-animate-css";
+
+@custom-variant dark (&:where(.dark, .dark *));
+
+/* ── Primitive color scale (neutral) ── */
+:root {
+  --color-neutral-white: #ffffff;
+  --color-neutral-50: #fafafa;
+  --color-neutral-100: #f5f5f5;
+  --color-neutral-150: #ebebeb;
+  --color-neutral-200: #e5e5e5;
+  --color-neutral-300: #d4d4d4;
+  --color-neutral-400: #a3a3a3;
+  --color-neutral-500: #737373;
+  --color-neutral-600: #525252;
+  --color-neutral-700: #404040;
+  --color-neutral-800: #262626;
+  --color-neutral-850: #1f1f1f;
+  --color-neutral-900: #171717;
+  --color-neutral-950: #0a0a0a;
+  --color-neutral-black: #000000;
+
+  /* ── fg tokens ── */
+  --fg-primary: var(--color-neutral-950);
+  --fg-primary-inverted: var(--color-neutral-100);
+  --fg-secondary: var(--color-neutral-600);
+  --fg-secondary-hover: var(--color-neutral-black);
+  --fg-secondary-inverted: var(--color-neutral-400);
+  --fg-secondary-inverted-hover: var(--color-neutral-150);
+  --fg-tertiary: var(--color-neutral-500);
+  --fg-tertiary-inverted: var(--color-neutral-600);
+  --fg-static-white: var(--color-neutral-white);
+  --fg-link: #2563eb;
+  --fg-link-hover: #3b82f6;
+  --fg-error: #dc2626;
+  --fg-warning: #d97706;
+  --fg-success: #16a34a;
+
+  /* ── bg tokens ── */
+  --bg-surface-main: var(--color-neutral-50);
+  --bg-surface-container: var(--color-neutral-white);
+  --bg-surface-nested: var(--color-neutral-50);
+  --bg-surface-overlay: rgba(0, 0, 0, 0.48);
+  --bg-surface-container-inverted: var(--color-neutral-900);
+  --bg-surface-nested-inverted: var(--color-neutral-850);
+  --bg-selection-container-hover: var(--color-neutral-50);
+  --bg-selection-container-active: var(--color-neutral-100);
+  --bg-selection-container-hover-inverted: var(--color-neutral-850);
+  --bg-selection-container-active-inverted: var(--color-neutral-900);
+  --bg-action-primary: var(--color-neutral-black);
+  --bg-action-primary-hover: var(--color-neutral-850);
+  --bg-action-primary-inverted: var(--color-neutral-white);
+  --bg-action-primary-inverted-hover: var(--color-neutral-100);
+  --bg-action-secondary: var(--color-neutral-100);
+  --bg-action-secondary-hover: var(--color-neutral-150);
+  --bg-action-secondary-inverted: var(--color-neutral-850);
+  --bg-action-secondary-inverted-hover: var(--color-neutral-800);
+  --bg-status-error: #ef4444;
+  --bg-status-error-hover: #dc2626;
+  --bg-status-warning: #f59e0b;
+  --bg-status-warning-hover: #d97706;
+  --bg-accent: #3b82f6;
+  --bg-illustration-dark: var(--color-neutral-950);
+  --bg-illustration-light: var(--color-neutral-100);
+
+  /* ── border tokens ── */
+  --border-default: var(--color-neutral-100);
+  --border-default-inverted: var(--color-neutral-800);
+  --border-error: #dc2626;
+  --border-warning: #d97706;
+  --border-success: #16a34a;
+  --border-divider: var(--color-neutral-100);
+  --border-divider-tint: var(--color-neutral-150);
+  --border-divider-inverted: var(--color-neutral-800);
+  --border-indicator: var(--color-neutral-300);
+  --border-cutout: var(--color-neutral-white);
+
+  /* ── focus tokens ── */
+  --focus-ring: #000000;
+  --focus-error: #dc2626;
+
+  /* ── shadow conventions ── */
+  --shadow-1: 0 4px 24px -4px rgba(0, 0, 0, 0.16);
+  --shadow-2: 0 8px 32px -4px rgba(0, 0, 0, 0.24);
+  --shadow-3: 0 12px 48px -8px rgba(0, 0, 0, 0.24);
+
+  /* ── radius ── */
+  --radius-container: 16px;
+  --radius-nested: 12px;
+  --radius-small: 8px;
+  --radius-full: 9999px;
+}
+
+.dark {
+  /* ── fg tokens ── */
+  --fg-primary: var(--color-neutral-100);
+  --fg-primary-inverted: var(--color-neutral-950);
+  --fg-secondary: var(--color-neutral-400);
+  --fg-secondary-hover: var(--color-neutral-150);
+  --fg-secondary-inverted: var(--color-neutral-600);
+  --fg-secondary-inverted-hover: var(--color-neutral-black);
+  --fg-tertiary: var(--color-neutral-600);
+  --fg-tertiary-inverted: var(--color-neutral-500);
+  --fg-link: #3b82f6;
+  --fg-link-hover: #60a5fa;
+  --fg-error: #ef4444;
+  --fg-warning: #f59e0b;
+  --fg-success: #22c55e;
+
+  /* ── bg tokens ── */
+  --bg-surface-main: var(--color-neutral-950);
+  --bg-surface-container: var(--color-neutral-900);
+  --bg-surface-nested: var(--color-neutral-850);
+  --bg-surface-container-inverted: var(--color-neutral-white);
+  --bg-surface-nested-inverted: var(--color-neutral-50);
+  --bg-selection-container-hover: var(--color-neutral-850);
+  --bg-selection-container-active: var(--color-neutral-800);
+  --bg-selection-container-hover-inverted: var(--color-neutral-50);
+  --bg-selection-container-active-inverted: var(--color-neutral-100);
+  --bg-action-primary: var(--color-neutral-150);
+  --bg-action-primary-hover: var(--color-neutral-200);
+  --bg-action-primary-inverted: var(--color-neutral-950);
+  --bg-action-primary-inverted-hover: var(--color-neutral-850);
+  --bg-action-secondary: var(--color-neutral-800);
+  --bg-action-secondary-hover: var(--color-neutral-500);
+  --bg-action-secondary-inverted: var(--color-neutral-100);
+  --bg-action-secondary-inverted-hover: var(--color-neutral-150);
+  --bg-status-warning-hover: #fbbf24;
+  --bg-illustration-dark: var(--color-neutral-100);
+  --bg-illustration-light: var(--color-neutral-800);
+
+  /* ── border tokens ── */
+  --border-default: var(--color-neutral-800);
+  --border-default-inverted: var(--color-neutral-150);
+  --border-error: #ef4444;
+  --border-warning: #f59e0b;
+  --border-success: #22c55e;
+  --border-divider: var(--color-neutral-800);
+  --border-divider-tint: var(--color-neutral-700);
+  --border-divider-inverted: var(--color-neutral-150);
+  --border-indicator: var(--color-neutral-400);
+  --border-cutout: var(--color-neutral-black);
+
+  /* ── focus tokens ── */
+  --focus-ring: #ffffff;
+
+  /* ── shadow conventions ── */
+  --shadow-1: 0 4px 24px -4px rgba(0, 0, 0, 0.24);
+  --shadow-2: 0 8px 32px -4px rgba(0, 0, 0, 0.48);
+  --shadow-3: 0 12px 48px -8px rgba(0, 0, 0, 0.48);
+}
+
+/* ── Global focus ring ── */
+*:focus-visible {
+  outline: 2px solid var(--focus-ring);
+  outline-offset: 2px;
+  box-shadow: none;
+}
+
+/* ── Custom animations ── */
+@keyframes fadeIn {
+  from {
+    opacity: 0;
+    transform: translateY(-10px);
+  }
+  to {
+    opacity: 1;
+    transform: translateY(0);
+  }
+}
+@keyframes fadeOut {
+  from {
+    opacity: 1;
+    transform: translateY(0);
+  }
+  to {
+    opacity: 0;
+    transform: translateY(10px);
+  }
+}
+.animate-fadeIn {
+  animation: fadeIn 0.2s ease-out forwards;
+}
+.animate-fadeOut {
+  animation: fadeOut 0.2s ease-out forwards;
+}
+
+@keyframes shimmer {
+  100% {
+    transform: translateX(100%);
+  }
+}
+.animate-shimmer {
+  animation: shimmer 2s infinite;
+}
+
+@media (max-width: 768px) {
+  .overflow-x-auto {
+    -webkit-overflow-scrolling: touch;
+  }
+}
+
+@theme inline {
+  --radius-sm: calc(var(--radius) - 4px);
+  --radius-md: calc(var(--radius) - 2px);
+  --radius-lg: var(--radius);
+  --radius-xl: calc(var(--radius) + 4px);
+  --radius-container: var(--radius-container);
+  --radius-nested: var(--radius-nested);
+  --radius-small: var(--radius-small);
+
+  /* fg tokens — use with text-* utilities */
+  --color-primary: var(--fg-primary);
+  --color-primary-inverted: var(--fg-primary-inverted);
+  --color-secondary: var(--fg-secondary);
+  --color-secondary-hover: var(--fg-secondary-hover);
+  --color-secondary-inverted: var(--fg-secondary-inverted);
+  --color-secondary-inverted-hover: var(--fg-secondary-inverted-hover);
+  --color-tertiary: var(--fg-tertiary);
+  --color-tertiary-inverted: var(--fg-tertiary-inverted);
+  --color-static-white: var(--fg-static-white);
+  --color-link: var(--fg-link);
+  --color-link-hover: var(--fg-link-hover);
+  --color-error: var(--fg-error);
+  --color-warning: var(--fg-warning);
+  --color-success: var(--fg-success);
+
+  /* bg tokens — use with bg-* utilities */
+  --color-surface-main: var(--bg-surface-main);
+  --color-surface-container: var(--bg-surface-container);
+  --color-surface-nested: var(--bg-surface-nested);
+  --color-surface-overlay: var(--bg-surface-overlay);
+  --color-surface-container-inverted: var(--bg-surface-container-inverted);
+  --color-surface-nested-inverted: var(--bg-surface-nested-inverted);
+  --color-selection-container-hover: var(--bg-selection-container-hover);
+  --color-selection-container-active: var(--bg-selection-container-active);
+  --color-selection-container-hover-inverted: var(--bg-selection-container-hover-inverted);
+  --color-selection-container-active-inverted: var(--bg-selection-container-active-inverted);
+  --color-action-primary: var(--bg-action-primary);
+  --color-action-primary-hover: var(--bg-action-primary-hover);
+  --color-action-primary-inverted: var(--bg-action-primary-inverted);
+  --color-action-primary-inverted-hover: var(--bg-action-primary-inverted-hover);
+  --color-action-secondary: var(--bg-action-secondary);
+  --color-action-secondary-hover: var(--bg-action-secondary-hover);
+  --color-action-secondary-inverted: var(--bg-action-secondary-inverted);
+  --color-action-secondary-inverted-hover: var(--bg-action-secondary-inverted-hover);
+  --color-status-error: var(--bg-status-error);
+  --color-status-error-hover: var(--bg-status-error-hover);
+  --color-status-warning: var(--bg-status-warning);
+  --color-status-warning-hover: var(--bg-status-warning-hover);
+  --color-accent: var(--bg-accent);
+  --color-illustration-dark: var(--bg-illustration-dark);
+  --color-illustration-light: var(--bg-illustration-light);
+
+  /* border tokens */
+  --color-border-default: var(--border-default);
+  --color-border-default-inverted: var(--border-default-inverted);
+  --color-border-error: var(--border-error);
+  --color-border-warning: var(--border-warning);
+  --color-border-success: var(--border-success);
+  --color-border-divider: var(--border-divider);
+  --color-border-divider-tint: var(--border-divider-tint);
+  --color-border-divider-inverted: var(--border-divider-inverted);
+  --color-border-indicator: var(--border-indicator);
+  --color-border-cutout: var(--border-cutout);
+
+  /* shadow tokens */
+  --shadow-1: var(--shadow-1);
+  --shadow-2: var(--shadow-2);
+  --shadow-3: var(--shadow-3);
+}
+
+@layer base {
+  * {
+    @apply border-border-default;
+  }
+  body {
+    @apply bg-surface-main text-primary;
+    font-family: "Inter", system-ui, sans-serif;
+  }
+}

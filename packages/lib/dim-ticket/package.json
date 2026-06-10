@@ -1,0 +1,54 @@
+{
+  "name": "@identity-backend/dim-ticket",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "version": "0.0.1",
+  "author": "Ryan Lee <ryan@parity.io>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/mod.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit --incremental",
+    "test": "vitest run",
+    "mutation": "backend run --cmd 'stryker run --incremental' --stryker",
+    "mutation:full": "backend run --guard --cmd 'stryker run'",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "@identity-backend/substrate-schema": "workspace:^"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/testing": "workspace:^",
+    "@identity-backend/vitest-config": "workspace:^",
+    "tsdown": "catalog:",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

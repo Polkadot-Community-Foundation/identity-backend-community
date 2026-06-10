@@ -1,0 +1,9 @@
+name: Setup pnpm toolchain
+description: Node + Bun + Corepack + pnpm-store cache (composes the three runtimes needed for pnpm workspace builds)
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-node-runtime
+    - uses: ./.github/actions/setup-bun-runtime
+    - uses: ./.github/actions/setup-pnpm-store

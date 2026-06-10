@@ -1,0 +1,64 @@
+{
+  "branches": ["main"],
+  "plugins": [
+    [
+      "@semantic-release/commit-analyzer",
+      {
+        "preset": "conventionalcommits",
+        "releaseRules": [
+          { "type": "feat", "release": "minor" },
+          { "type": "api", "release": "minor" },
+          { "type": "fix", "release": "patch" },
+          { "type": "perf", "release": "patch" },
+          { "type": "improvement", "release": "patch" },
+          { "type": "deps", "release": "patch" },
+          { "type": "security", "release": "patch" },
+          { "type": "chore", "release": false },
+          { "type": "docs", "release": false },
+          { "type": "refactor", "release": false },
+          { "type": "test", "release": false },
+          { "type": "style", "release": false },
+          { "type": "ci", "release": false },
+          { "type": "build", "release": false },
+          { "type": "ai", "release": false },
+          { "type": "revert", "release": "patch" }
+        ],
+        "parserOpts": {
+          "noteKeywords": ["BREAKING CHANGE", "BREAKING-CHANGE"]
+        }
+      }
+    ],
+    [
+      "@semantic-release/release-notes-generator",
+      {
+        "preset": "conventionalcommits",
+        "presetConfig": {
+          "types": [
+            { "type": "feat", "section": "Features" },
+            { "type": "api", "section": "API Changes" },
+            { "type": "fix", "section": "Bug Fixes" },
+            { "type": "perf", "section": "Performance Improvements" },
+            { "type": "improvement", "section": "Improvements" },
+            { "type": "deps", "section": "Dependencies" },
+            { "type": "security", "section": "Security" },
+            { "type": "revert", "section": "Reverts" },
+            { "type": "chore", "hidden": true },
+            { "type": "docs", "hidden": true },
+            { "type": "refactor", "hidden": true },
+            { "type": "test", "hidden": true },
+            { "type": "style", "hidden": true },
+            { "type": "ci", "hidden": true },
+            { "type": "build", "hidden": true },
+            { "type": "ai", "hidden": true }
+          ]
+        }
+      }
+    ],
+    [
+      "@semantic-release/github",
+      {
+        "successComment": false
+      }
+    ]
+  ]
+}

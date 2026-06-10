@@ -1,0 +1,204 @@
+services:
+  chopsticks_pop_testnet:
+    image: ${TAG_CHOPSTICKS:-chopsticks:e2e-latest}
+    restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      CONFIG_FILE: pop-testnet.json
+    networks:
+      - default
+    expose:
+      - "8000"
+    ports:
+      - 0:8000
+
+  e2e-pop-testnet-startup-container:
+    image: ${TAG_APP_E2E:-identity-backend-startup:e2e-latest}
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    networks:
+      - default
+    depends_on:
+      chopsticks_pop_testnet:
+        condition: service_healthy
+    environment:
+      - PEOPLE_RPC_ENDPOINTS=ws://chopsticks_pop_testnet:8000
+
+  chopsticks_asset_hub:
+    image: ${TAG_CHOPSTICKS:-chopsticks:e2e-latest}
+    restart: always
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    environment:
+      CONFIG_FILE: paseo-ah-next.json
+    networks:
+      - default
+    expose:
+      - "8000"
+    ports:
+      - 0:8000
+
+  # Coturn TURN/STUN Server 1
+  coturn1:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    profiles:
+      - turn
+    ports:
+      - "0:3478"
+      - "0:3478/udp"
+    networks:
+      - default
+    command: >
+      --realm=test-realm
+      --use-auth-secret
+      --static-auth-secret=test_secret_for_e2e_turn_coturn
+      --rest-api-separator=:
+      --fingerprint
+      --listening-port=3478
+      --no-tls
+      --no-dtls
+      --min-port=49152
+      --max-port=65535
+      --log-file=stdout
+      --verbose
+
+  # Coturn TURN/STUN Server 2
+  coturn2:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    profiles:
+      - turn
+    ports:
+      - "0:3478"
+      - "0:3478/udp"
+    networks:
+      - default
+    command: >
+      --realm=test-realm
+      --use-auth-secret
+      --static-auth-secret=test_secret_for_e2e_turn_coturn
+      --rest-api-separator=:
+      --fingerprint
+      --listening-port=3478
+      --no-tls
+      --no-dtls
+      --min-port=49152
+      --max-port=65535
+      --log-file=stdout
+      --verbose
+
+  # Coturn TURN/STUN Server 3
+  coturn3:
+    image: coturn/coturn:latest
+    restart: unless-stopped
+    profiles:
+      - turn
+    ports:
+      - "0:3478"
+      - "0:3478/udp"
+    networks:
+      - default
+    command: >
+      --realm=test-realm
+      --use-auth-secret
+      --static-auth-secret=test_secret_for_e2e_turn_coturn
+      --rest-api-separator=:
+      --fingerprint
+      --listening-port=3478
+      --no-tls
+      --no-dtls
+      --min-port=49152
+      --max-port=65535
+      --log-file=stdout
+      --verbose
+
+  web:
+    image: ${TAG_APP_IDENTITY:-identity-backend:e2e-latest}
+    env_file:
+      - path: .env
+        required: false
+    dns:
+      - 8.8.8.8
+      - 8.8.4.4
+    networks:
+      - default
+      - test-network
+    depends_on:
+      chopsticks_pop_testnet:
+        condition: service_healthy
+      e2e-pop-testnet-startup-container:
+        condition: service_completed_successfully
+      chopsticks_asset_hub:
+        condition: service_healthy
+    expose:
+      - "8080"
+    ports:
+      - 0:8080
+    mem_limit: 2048M
+    mem_reservation: 512M
+    healthcheck:
+      test: ["CMD", "curl", "-f", "http://localhost:8080/healthcheck"]
+      interval: 10s
+      timeout: 30s
+      start_period: 120s
+      retries: 10
+    environment:
+      - CI=true
+      - ENFORCE_AUTH=${ENFORCE_AUTH}
+      - PROXY_DELEGATION_ENABLED=${PROXY_DELEGATION_ENABLED}
+      - ATTESTER_PROXY_PRIVATE_KEY=${ATTESTER_PROXY_PRIVATE_KEY}
+      - PEOPLE_RPC_ENDPOINTS=${PEOPLE_RPC_ENDPOINTS}
+      - ASSET_HUB_RPC_ENDPOINTS=${ASSET_HUB_RPC_ENDPOINTS:-}
+      - DOTNS_GATEWAY_ENABLED=${DOTNS_GATEWAY_ENABLED:-false}
+      - DOTNS_INTAKE_FRESHNESS_MAX_AGE_SECONDS=${DOTNS_INTAKE_FRESHNESS_MAX_AGE_SECONDS:-120}
+      - DOTNS_SIGNED_AT_SAFETY_MARGIN_SECONDS=${DOTNS_SIGNED_AT_SAFETY_MARGIN_SECONDS:-60}
+      - NODE_ENV=${NODE_ENV}
+      - PEOPLE_NETWORK=${PEOPLE_NETWORK}
+      - DATABASE_URL=${DATABASE_URL}
+      - PROXY_PRIVATE_KEY=${PROXY_PRIVATE_KEY}
+      - JWT_AUTH_SECRET=${JWT_AUTH_SECRET}
+      - GOOGLE_CREDENTIALS=${GOOGLE_CREDENTIALS}
+      - APN_PRIVATE_KEY=${APN_PRIVATE_KEY}
+      - APN_KEY_ID=${APN_KEY_ID}
+      - APN_TEAM_ID=${APN_TEAM_ID}
+      - APN_TOPICS=${APN_TOPICS}
+      - ANDROID_PACKAGE_NAMES=${ANDROID_PACKAGE_NAMES}
+      - ANDROID_SIGNING_DIGEST_PLAYSTORE=${ANDROID_SIGNING_DIGEST_PLAYSTORE}
+      - ANDROID_SIGNING_DIGEST_WEBSITE=${ANDROID_SIGNING_DIGEST_WEBSITE}
+      - ANDROID_ATTESTATION_CRL_URL=${ANDROID_ATTESTATION_CRL_URL:-https://android.googleapis.com/attestation/status}
+      - ANDROID_ATTESTATION_CRL_CACHE_TTL=${ANDROID_ATTESTATION_CRL_CACHE_TTL:-1 hour}
+      - PORT=8080
+      - REQUEST_SAMPLE_RATE=${REQUEST_SAMPLE_RATE}
+      - FINALIZED_BLOCK_TIMEOUT=${FINALIZED_BLOCK_TIMEOUT}
+      - AUTH_ENABLED=${AUTH_ENABLED}
+      - ATTESTER_PUBLIC_KEY=${ATTESTER_PUBLIC_KEY}
+      - REGISTER_USERNAME_BATCH_SIZE=${REGISTER_USERNAME_BATCH_SIZE}
+      - USERNAME_INDEXER_ENABLED=${USERNAME_INDEXER_ENABLED}
+      - USERNAME_INDEXER_SYNC_INTERVAL_MS=${USERNAME_INDEXER_SYNC_INTERVAL_MS}
+      - PUSH_SUBSCRIPTIONS_INDEXER_ENABLED=${PUSH_SUBSCRIPTIONS_INDEXER_ENABLED}
+      - WEBSOCKET_HEARTBEAT_TIMEOUT=1800000
+      - DIM_TICKET_JOB_INTERVAL_SECONDS=1
+      - INVITATION_TICKET_DAEMON_ENABLED=${INVITATION_TICKET_DAEMON_ENABLED:-false}
+      - ADMIN_ROUTE_ENABLED=${ADMIN_ROUTE_ENABLED:-false}
+      - OTEL_SERVICE_NAME=${OTEL_SERVICE_NAME:-}
+      - OTEL_EXPORTER_OTLP_ENDPOINT=${OTEL_EXPORTER_OTLP_ENDPOINT:-}
+      - OTEL_SPAN_PROCESSOR=${OTEL_SPAN_PROCESSOR:-}
+      - SENTRY_TRACE_SAMPLE_RATE=1
+      - DEBUG_HEAPDUMP_ENABLED=${DEBUG_HEAPDUMP_ENABLED:-false}
+      - DEBUG_HEAPDUMP_COOLDOWN_SECONDS=${DEBUG_HEAPDUMP_COOLDOWN_SECONDS:-5}
+      - TURN_SECRET=${TURN_SECRET}
+      - TURN_AUTH_ALGORITHM=${TURN_AUTH_ALGORITHM}
+      - TURN_TTL=${TURN_TTL}
+      - TURN_REALM=${TURN_REALM}
+      - ICE_SERVERS=${ICE_SERVERS}
+
+networks:
+  default:
+  test-network:
+    external: true
+    name: ${E2E_TEST_NETWORK:-test-network}

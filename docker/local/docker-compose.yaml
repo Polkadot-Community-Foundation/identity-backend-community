@@ -1,0 +1,13 @@
+---
+services:
+  lgtm:
+    image: grafana/otel-lgtm:latest
+    ports:
+      - 3000:3000 # grafana
+      - 4317:4317 # otlp grpc
+      - 4318:4318 # otlp http
+      - 9090:9090 # prometheus-compatible metrics
+    environment:
+      - GF_AUTH_ANONYMOUS_ENABLED=true
+      - GF_AUTH_ANONYMOUS_ORG_ROLE=Admin
+      - GF_AUTH_DISABLE_LOGIN_FORM=true

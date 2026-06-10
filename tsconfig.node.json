@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "composite": true,
+    "skipLibCheck": true,
+    "module": "ESNext",
+    "moduleResolution": "bundler",
+    "allowSyntheticDefaultImports": true,
+    "types": ["node"]
+  },
+  "include": [
+    "commitlint.config.ts",
+    "oxlint.config.ts",
+    "vitest.config.ts",
+    ".lintstagedrc.js"
+  ]
+}

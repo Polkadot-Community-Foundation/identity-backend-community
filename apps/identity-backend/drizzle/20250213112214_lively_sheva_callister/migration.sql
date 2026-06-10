@@ -1,0 +1,1 @@
+ALTER TABLE "username" ALTER COLUMN "network" DROP DEFAULT;

@@ -1,0 +1,156 @@
+################################################################################
+# Base Configuration
+################################################################################
+version: 2
+
+updates:
+  - package-ecosystem: "devcontainers"
+    directory: "/"
+    labels:
+      - "automerge"
+    schedule:
+      interval: "weekly"
+    commit-message:
+      prefix: "chore"
+  ################################################################################
+  # NPM Dependencies
+  ################################################################################
+  - package-ecosystem: npm
+    directory: "/"
+    labels:
+      - "automerge"
+    schedule:
+      interval: weekly
+    open-pull-requests-limit: 5
+    exclude-paths:
+      - "repos/**"
+    commit-message:
+      prefix: "deps"
+
+    groups:
+      ############################################################################
+      # Minor and Patch Updates
+      ############################################################################
+      otel-minor-patch:
+        patterns:
+          - "@opentelemetry/*"
+        update-types: ["minor", "patch"]
+
+      polkadot-api-minor-patch:
+        patterns:
+          - "@polkadot-api/*"
+          - "polkadot-api"
+        update-types: ["minor", "patch"]
+
+      polkadot-labs-minor-patch:
+        patterns:
+          - "@polkadot-labs/*"
+        update-types: ["minor", "patch"]
+
+      effect-minor-patch:
+        patterns:
+          - "@effect/*"
+          - "effect"
+        update-types: ["minor", "patch"]
+
+      drizzle-minor-patch:
+        patterns:
+          - "drizzle-orm"
+          - "drizzle-kit"
+          - "drizzle-zod"
+        update-types: ["minor", "patch"]
+
+      bun-types-minor-patch:
+        patterns:
+          - "@types/bun"
+        update-types: ["minor", "patch"]
+
+      testing-minor-patch:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@stryker-mutator/*"
+        update-types: ["minor", "patch"]
+
+      "@tim-smart/openapi-gen-minor-patch":
+        patterns:
+          - "@tim-smart/openapi-gen"
+        update-types: ["minor", "patch"]
+
+      other-minor-patch:
+        patterns: ["*"]
+        exclude-patterns:
+          - "@opentelemetry/*"
+          - "@polkadot-api/*"
+          - "polkadot-api"
+          - "@polkadot-labs/*"
+          - "@effect/*"
+          - "effect"
+          - "drizzle-orm"
+          - "drizzle-kit"
+          - "drizzle-zod"
+          - "@types/bun"
+          - "@tim-smart/openapi-gen"
+          - "vitest"
+          - "@vitest/*"
+          - "@stryker-mutator/*"
+        update-types: ["minor", "patch"]
+
+      ############################################################################
+      # Major Updates
+      ############################################################################
+      otel-major:
+        patterns:
+          - "@opentelemetry/*"
+        update-types: ["major"]
+
+      polkadot-api-major:
+        patterns:
+          - "@polkadot-api/*"
+          - "polkadot-api"
+        update-types: ["major"]
+
+      polkadot-labs-major:
+        patterns:
+          - "@polkadot-labs/*"
+        update-types: ["major"]
+
+      effect-major:
+        patterns:
+          - "@effect/*"
+          - "effect"
+        update-types: ["major"]
+
+      drizzle-major:
+        patterns:
+          - "drizzle-orm"
+          - "drizzle-kit"
+          - "drizzle-zod"
+        update-types: ["major"]
+
+      typescript-major:
+        patterns:
+          - "typescript"
+          - "@total-typescript/*"
+        update-types: ["major"]
+
+      testing-major:
+        patterns:
+          - "vitest"
+          - "@vitest/*"
+          - "@stryker-mutator/*"
+        update-types: ["major"]
+
+  ################################################################################
+  # GitHub Actions
+  ################################################################################
+  - package-ecosystem: github-actions
+    directory: "/"
+    labels:
+      - "automerge"
+    schedule:
+      interval: weekly
+    exclude-paths:
+      - "repos/**"
+    commit-message:
+      prefix: "ci"

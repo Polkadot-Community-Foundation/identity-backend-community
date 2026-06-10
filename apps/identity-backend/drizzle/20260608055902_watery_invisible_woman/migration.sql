@@ -1,0 +1,1 @@
+DROP TABLE "polkadot_app"."android_attestation_tokens";

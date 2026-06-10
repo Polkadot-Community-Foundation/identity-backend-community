@@ -1,0 +1,55 @@
+{
+  "name": "@identity-backend/testing",
+  "private": true,
+  "license": "MIT",
+  "version": "0.3.0",
+  "author": "Ryan Lee <ryan@parity.io>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/mod.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./hono": {
+      "@identity-backend/source": "./src/hono.ts",
+      "default": "./dist/hono.mjs"
+    },
+    "./schema": {
+      "@identity-backend/source": "./src/schema.ts",
+      "default": "./dist/schema.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit --incremental",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "@effect/vitest": "catalog:"
+  },
+  "devDependencies": {
+    "@identity-backend/oxlint-config": "workspace:^",
+    "effect": "catalog:",
+    "tsdown": "catalog:",
+    "hono": "^4.12.18",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:",
+    "hono": "^4.12.18",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./hono": "./dist/hono.mjs",
+      "./schema": "./dist/schema.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

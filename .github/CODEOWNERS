@@ -1,0 +1,9 @@
+* @ryanleecode @bee344 @mordamax
+
+# Dependency files: no code owner review for Dependabot-only PRs
+package.json
+pnpm-lock.yaml
+
+# Helm charts are owned by devops team
+
+# Exception: staging values file is managed separately

@@ -1,0 +1,30 @@
+name: Turbo prune for Docker
+description: Run `turbo prune --docker` and patch file-protocol dep targets into the `json/` skeleton. `turbo prune`'s `json/` output strips gitignored file-protocol dep directories, which breaks `pnpm install` inside Docker. `full/` is already complete.
+
+inputs:
+  filter:
+    description: Workspace package to prune for (passed to `turbo prune`)
+    required: true
+  out-dir:
+    description: Where to write the pruned monorepo (path relative to repo root)
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - shell: bash
+      env:
+        OUT: ${{ inputs.out-dir }}
+        FILTER: ${{ inputs.filter }}
+      run: |
+        set -euo pipefail
+        rm -rf "$OUT"
+        corepack pnpm exec turbo prune --docker "$FILTER" --out-dir="$OUT"
+
+        # Patch file-protocol dep targets (gitignored) into `json/` so pnpm install can resolve them.
+        # `full/` already contains these via turbo's tracked-file walker.
+        if [ -f "$OUT/json/packages/descriptors/package.json" ]; then
+          mkdir -p "$OUT/json/packages/descriptors/.papi/descriptors"
+          cp packages/descriptors/.papi/descriptors/package.json \
+             "$OUT/json/packages/descriptors/.papi/descriptors/package.json"
+        fi

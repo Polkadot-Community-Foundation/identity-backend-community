@@ -1,0 +1,185 @@
+{
+  "endpoint": [
+    "wss://previewnet.substrate.dev/people"
+  ],
+  "mock-signature-host": true,
+  "allow-unresolved-imports": true,
+  "import-storage": {
+    "System": {
+      "Account": [
+        [
+          [
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          ],
+          {
+            "providers": 1,
+            "data": {
+              "free": "1000000000000000000000000000000"
+            }
+          }
+        ],
+        [
+          [
+            "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty"
+          ],
+          {
+            "providers": 1,
+            "data": {
+              "free": "1000000000000000000000000000000"
+            }
+          }
+        ],
+        [
+          [
+            "5EkK3MW15W5RDvEUK7NJtJudiaV87Zgj4oGQJrBu3yveo2mJ"
+          ],
+          {
+            "providers": 1,
+            "data": {
+              "free": "1000000000000000000000000000000"
+            }
+          }
+        ]
+      ]
+    },
+    "PeopleLite": {
+      "AttestationAllowance": [
+        [
+          [
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          ],
+          1000000
+        ]
+      ]
+    },
+    "Sudo": {
+      "Key": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+    },
+    "People": {
+      "AccountToPersonalId": [
+        [
+          [
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          ],
+          "0x0000000000000000"
+        ]
+      ],
+      "AccountToAlias": [
+        [
+          [
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          ],
+          {
+            "revision": 0,
+            "ring": 0,
+            "ca": {
+              "alias": "0xdcffe5275800bbe0a90369393144f3e6a23b6666588b06837bd3db8656b7c8ed",
+              "context": "0x706f703a706f6c6b61646f742e6e6574776f726b2f7265736f75726365732020"
+            }
+          }
+        ]
+      ],
+      "People": [
+        [
+          [
+            0
+          ],
+          {
+            "key": "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d",
+            "position": {
+              "Included": {
+                "ring_index": 0,
+                "ring_position": 0,
+                "scheduled_for_removal": false
+              }
+            },
+            "account": "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          }
+        ]
+      ],
+      "NextPersonalId": 1
+    },
+    "Members": {
+      "Root": [
+        [
+          [
+            "0x706f703a706f6c6b61646f742e6e6574776f726b2f70656f706c652020202020",
+            0
+          ],
+          {
+            "root": "0x17f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e113e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb80606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801116b2250fc4b3098ccadf9ec58526aecf307d21e233f65110554ee04460f72a616f4d070941b0796de5defda29196e40013645b8518e5568e75d320da8b83a87e12406956b9c74491ee5ecf06dc297ba1186016209d78fd832c16ef62fc49eff0bc832fb878c2f66addd846aa85954b856c3bc70d87344f9006889e58eb0ec5734151f99b9a5b653e991247ad506d0fb12db3e2e8318b647537f00e6b702fc8526e8c9101a7b7cbc410fbf8f6021f2e45393c8696431c1a6fcc7f5a7d90ab999056eb470acf381134c6002f932cbf148bb9721a0683063adc38671c1054c2942d696e479c5a09fa5eed16c2916007fa30241b5e8f47bd48a83b81328e87869ce9f149a89d34f08be5f38ac97c50cb1c1fb89f2a208807fe81a68375cff902e8a1070032172c96c21314f18ac45f9a1b5c39c125598386c951f70389aa71a9750347b3534a3415adb90e3c393237eb7aa16389e32bf43f17bdf087283f8dac3ede0917df7e52876008ae550db4e8a3536c416b8f7c28c47373593281ed63ad31211c7ea6ca6ea24fe6c5a61ebf4e8c7c053faad1b12d999bd655418b4fbd892ac4804841e5b94345c06a45b5d22d59076093f5596fb3d43b85539a24ff26ec0d4f2ab61482549d738134b42f8a3b35d712eeaeee7074a53e95ebd3dfcff7df576",
+            "revision": 0,
+            "intermediate": "0x056eb470acf381134c6002f932cbf148bb9721a0683063adc38671c1054c2942d696e479c5a09fa5eed16c2916007fa30241b5e8f47bd48a83b81328e87869ce9f149a89d34f08be5f38ac97c50cb1c1fb89f2a208807fe81a68375cff902e8a1070032172c96c21314f18ac45f9a1b5c39c125598386c951f70389aa71a9750347b3534a3415adb90e3c393237eb7aa16389e32bf43f17bdf087283f8dac3ede0917df7e52876008ae550db4e8a3536c416b8f7c28c47373593281ed63ad31211c7ea6ca6ea24fe6c5a61ebf4e8c7c053faad1b12d999bd655418b4fbd892ac4804841e5b94345c06a45b5d22d59076093f5596fb3d43b85539a24ff26ec0d4f2ab61482549d738134b42f8a3b35d712eeaeee7074a53e95ebd3dfcff7df576ff020000000000000100000000000000db924e10a7c7ab761d8b79fa37cc299f27c71132c53ccdb70ecedc07dbb7803bda5ca18e76fbd5467319795e26fd80f0b9cf7fc888d995348b7ff299197a424417f1d3a73197d7942695638c4fa9ac0fc3688c4f9774b905a14e3a3f171bac586c55e83ff97a1aeffb3af00adb22c6bb08b3f481e3aaa0f1a09e30ed741d8ae4fcf5e095d5d00af600db18cb2c04b3edd03cc744a2888ae40caa232946c5e7e113e02b6052719f607dacd3a088274f65596bd0d09920b61ab5da61bbdc7f5049334cf11213945d57e5ac7d055d042b7e024aa2b2f08f0a91260805272dc51051c6e47ad4fa403b02b4510b647ae3d1770bac0326a805bbefd48056c8c121bdb80606c4a02ea734cc32acd2b02bc28b99cb3e287e85a763af267492ab572e99ab3f370d275cec1da1aaa9075ff05f79be0ce5d527727d6e118cc9cdc6da2e351aadfd9baa8cbdd3a76d429a695160d12c923ac9cc3baca289e193548608b82801116b2250fc4b3098ccadf9ec58526aecf307d21e233f65110554ee04460f72a616f4d070941b0796de5defda29196e40013645b8518e5568e75d320da8b83a87e12406956b9c74491ee5ecf06dc297ba1186016209d78fd832c16ef62fc49eff0bc832fb878c2f66addd846aa85954b856c3bc70d87344f9006889e58eb0ec5734151f99b9a5b653e991247ad506d0fb12db3e2e8318b647537f00e6b702fc8526e8c9101a7b7cbc410fbf8f6021f2e45393c8696431c1a6fcc7f5a7d90ab999"
+          }
+        ]
+      ],
+      "Members": [
+        [
+          [
+            "0x706f703a706f6c6b61646f742e6e6574776f726b2f70656f706c652020202020",
+            "0xd77b91efe0bd04f30c0aedb41bc6b331331c823ccb566b2f4101febe946fd45f"
+          ],
+          {
+            "Included": {
+              "ring_index": 0,
+              "ring_page": 0,
+              "ring_position": 0
+            }
+          }
+        ],
+        [
+          [
+            "0x706f703a706f6c6b61646f742e6e6574776f726b2f70656f706c652020202020",
+            "0xd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d"
+          ],
+          {
+            "Included": {
+              "ring_index": 0,
+              "ring_page": 0,
+              "ring_position": 0
+            }
+          }
+        ]
+      ]
+    },
+    "Game": {
+      "AvailableInvites": [
+        [
+          [
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          ],
+          100
+        ]
+      ]
+    },
+    "ProofOfInk": {
+      "AvailableInvites": [
+        [
+          [
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          ],
+          100
+        ]
+      ]
+    },
+    "Proxy": {
+      "Proxies": [
+        [
+          [
+            "5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY"
+          ],
+          [
+            [
+              {
+                "delegate": "5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty",
+                "proxyType": "Any",
+                "delay": 0
+              }
+            ],
+            "0"
+          ]
+        ]
+      ]
+    }
+  }
+}

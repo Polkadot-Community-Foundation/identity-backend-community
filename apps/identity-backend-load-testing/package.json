@@ -1,0 +1,30 @@
+{
+  "name": "@identity-backend/load-testing",
+  "private": true,
+  "version": "0.0.0",
+  "type": "module",
+  "description": "k6 load testing scenarios for identity-backend HTTP endpoints",
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rimraf dist",
+    "typecheck": "tsgo --noEmit --incremental",
+    "test:load:search": "k6 run dist/search.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080}",
+    "test:load:smoke": "k6 run dist/smoke-search.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080}",
+    "test:load:health": "k6 run dist/healthcheck.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080}",
+    "test:load:subscriptions": "k6 run dist/subscriptions.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080} --env JWT_SECRET=${JWT_SECRET:-test-secret}",
+    "test:load:auth-challenges": "k6 run dist/auth-challenges.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080}",
+    "test:load:stress": "k6 run dist/stress-search.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080}",
+    "test:load:concurrent": "k6 run dist/concurrent-search.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080}",
+    "test:load:all": "pnpm test:load:smoke && pnpm test:load:search && pnpm test:load:health",
+    "test:load:tdd": "k6 run --abort-on-fail dist/search.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080} --env THRESHOLDS_ONLY=1",
+    "test:load:ci": "k6 run --abort-on-fail dist/smoke-search.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080} && k6 run --abort-on-fail dist/search.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080}"
+  },
+  "devDependencies": {
+    "tsdown": "catalog:",
+    "rimraf": "^6.0.1",
+    "tsx": "^4.21.0",
+    "@types/node": "^22.0.0",
+    "pg": "^8.13.0",
+    "@types/pg": "^8.11.0"
+  }
+}

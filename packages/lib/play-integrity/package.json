@@ -1,0 +1,52 @@
+{
+  "name": "@identity-backend/play-integrity",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "version": "0.0.1",
+  "author": "Ryan Lee <ryan@parity.io>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/mod.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./types": {
+      "@identity-backend/source": "./src/types.ts",
+      "default": "./dist/types.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "test": "vitest run",
+    "typecheck": "tsgo --noEmit --incremental",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "@googleapis/playintegrity": "^18.0.1"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/vitest-config": "workspace:^",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "tsdown": "catalog:",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./types": "./dist/types.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

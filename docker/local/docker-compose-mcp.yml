@@ -1,0 +1,23 @@
+services:
+  context7:
+    image: denoland/deno:alpine
+    ports:
+      - "9001:9001"
+    command:
+      [
+        "deno",
+        "run",
+        "--allow-net",
+        "--allow-env=NO_DEPRECATION,TRACE_DEPRECATION",
+        "npm:@upstash/context7-mcp@1.0.14",
+        "--transport",
+        "sse",
+        "--port",
+        "9001",
+      ]
+    restart: unless-stopped
+    networks:
+      - mcp-network
+networks:
+  mcp-network:
+    driver: bridge

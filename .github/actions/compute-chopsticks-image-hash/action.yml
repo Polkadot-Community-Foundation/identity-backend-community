@@ -1,0 +1,23 @@
+name: Compute Chopsticks Image Hash
+description: |
+  Content hash for the chopsticks test image. Single source of truth for the
+  chopsticks hash inputs; consumed by both the build and load-test workflows so
+  they can never disagree. Paths-only — no pnpm/turbo setup required.
+
+outputs:
+  hash:
+    description: 16-char hex content hash
+    value: ${{ steps.hash.outputs.hash }}
+
+runs:
+  using: composite
+  steps:
+    - id: hash
+      uses: ./.github/actions/compute-image-hash
+      with:
+        paths: |
+          docker/test/e2e/chopsticks.dockerfile
+          docker/test/e2e/*.json
+          docker/test/e2e/chopsticks-signed-extensions.cjs
+          patches/@acala-network__chopsticks.patch
+          patches/@acala-network__chopsticks-core.patch

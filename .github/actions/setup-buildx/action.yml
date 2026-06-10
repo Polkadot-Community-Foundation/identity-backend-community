@@ -1,0 +1,15 @@
+name: Setup Buildx (persistent)
+description: >
+  Thin wrapper around docker/setup-buildx-action that uses a stable builder name and
+  keep-state true. On the self-hosted parity-default runner this preserves the
+  buildkitd container and its cache (including pulled base-image layers like
+  node:24-slim and oven/bun) across jobs, so FROM directives do not re-pull from
+  the registry every run.
+
+runs:
+  using: composite
+  steps:
+    - uses: docker/setup-buildx-action@v4
+      with:
+        name: parity-builder
+        keep-state: true

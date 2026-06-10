@@ -1,0 +1,41 @@
+name: Install docker compose v2 plugin
+description: Install Docker Compose v2 as a CLI plugin from the upstream GitHub release. Idempotent — skips if already installed.
+
+inputs:
+  version:
+    description: Compose release tag to install (default pins to a specific version; set to "latest" to track the release channel)
+    required: false
+    default: v2.32.4
+
+runs:
+  using: composite
+  steps:
+    - name: Install docker compose plugin
+      shell: bash
+      run: |
+        set -euo pipefail
+        if docker compose version >/dev/null 2>&1; then
+          echo "docker compose already installed: $(docker compose version --short)"
+          exit 0
+        fi
+
+        version="${{ inputs.version }}"
+        plugin_dir="${HOME}/.docker/cli-plugins"
+        plugin_path="${plugin_dir}/docker-compose"
+
+        mkdir -p "$plugin_dir"
+
+        os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        arch="$(uname -m)"
+
+        if [ "$version" = "latest" ]; then
+          url="https://github.com/docker/compose/releases/latest/download/docker-compose-${os}-${arch}"
+        else
+          url="https://github.com/docker/compose/releases/download/${version}/docker-compose-${os}-${arch}"
+        fi
+
+        echo "Installing docker compose ${version} from ${url}"
+        curl -fsSL "$url" -o "$plugin_path"
+        chmod +x "$plugin_path"
+
+        docker compose version

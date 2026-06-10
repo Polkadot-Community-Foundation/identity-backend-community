@@ -1,0 +1,107 @@
+diff --git a/dist/cjs/blockchain/index.js b/dist/cjs/blockchain/index.js
+index 95241247a5448b922385aef29081e82af7fdc130..0d817c50f559c2dce0ef6db3f8b296b26c281b65 100644
+--- a/dist/cjs/blockchain/index.js
++++ b/dist/cjs/blockchain/index.js
+@@ -249,6 +249,24 @@ class Blockchain {
+     /**
+    * Submit extrinsic to txpool.
+    */ async submitExtrinsic(extrinsic) {
++        // PATCHED: Accept validation errors when mock-signature-host is enabled
++        if (this.mockSignatureHost) {
++            try {
++                const validity = await this.validateExtrinsic(extrinsic);
++                if (validity.isOk) {
++                    await _class_private_field_get(this, _txpool1).submitExtrinsic(extrinsic);
++                    return (0, _utilcrypto.blake2AsHex)(extrinsic, 256);
++                }
++                console.log('[chopsticks-patch] Accepting validation error:', validity.asErr.toString());
++                await _class_private_field_get(this, _txpool1).submitExtrinsic(extrinsic);
++                return (0, _utilcrypto.blake2AsHex)(extrinsic, 256);
++            } catch (err) {
++                console.log('[chopsticks-patch] Accepting exception:', String(err));
++                await _class_private_field_get(this, _txpool1).submitExtrinsic(extrinsic);
++                return (0, _utilcrypto.blake2AsHex)(extrinsic, 256);
++            }
++        }
++        // END PATCH
+         const validity = await this.validateExtrinsic(extrinsic);
+         if (validity.isOk) {
+             await _class_private_field_get(this, _txpool1).submitExtrinsic(extrinsic);
+diff --git a/dist/cjs/blockchain/txpool.js b/dist/cjs/blockchain/txpool.js
+index dfbaade784fb628e0ef760251585d6fa2622dfc9..6656f2d9b8bbf49ee798050986cb342da054fb4d 100644
+--- a/dist/cjs/blockchain/txpool.js
++++ b/dist/cjs/blockchain/txpool.js
+@@ -304,9 +304,15 @@ class TxPool {
+     }
+ }
+ async function getSigner(extrinsic) {
+-    const registry = await _class_private_field_get(this, _chain).head.registry;
+-    const tx = registry.createType('GenericExtrinsic', extrinsic);
+-    return tx.signer.toString();
++    // PATCHED: Return placeholder on decode error
++    try {
++        const registry = await _class_private_field_get(this, _chain).head.registry;
++        const tx = registry.createType('GenericExtrinsic', extrinsic);
++        return tx.signer.toString();
++    } catch (err) {
++        console.log('[chopsticks-patch] Failed to decode signer:', String(err));
++        return 'unknown';
++    }
+ }
+ function maybeBuildBlock() {
+     switch(_class_private_field_get(this, _mode)){
+diff --git a/dist/cjs/setup.js b/dist/cjs/setup.js
+index 65d5c5f71db1f213762516b8d9048c02894e2eb3..6699434052ce127ea1345f89af60f6d79e885734 100644
+--- a/dist/cjs/setup.js
++++ b/dist/cjs/setup.js
+@@ -35,7 +35,7 @@ const processOptions = async (options)=>{
+         _logger.defaultLogger.debug(options, 'Setup options - WS');
+         provider = new _rpcprovider.WsProvider(options.endpoint, 3_000, undefined, options.rpcTimeout);
+     }
+-    const api = new _api.Api(provider);
++    const api = new _api.Api(provider, options.signedExtensions);
+     // setup api hooks
+     api.onFetching(options.hooks?.apiFetching);
+     if (options.db) {
+diff --git a/dist/esm/blockchain/index.js b/dist/esm/blockchain/index.js
+index 0cd01806e58a95ee918a60ec2617d061cb55a643..d30e70dce06c363948a1c78480d7676f645c0aef 100644
+--- a/dist/esm/blockchain/index.js
++++ b/dist/esm/blockchain/index.js
+@@ -253,6 +253,24 @@ const logger = defaultLogger.child({
+     /**
+    * Submit extrinsic to txpool.
+    */ async submitExtrinsic(extrinsic) {
++        // PATCHED: Accept validation errors when mock-signature-host is enabled
++        if (this.mockSignatureHost) {
++            try {
++                const validity = await this.validateExtrinsic(extrinsic);
++                if (validity.isOk) {
++                    await this.#txpool.submitExtrinsic(extrinsic);
++                    return blake2AsHex(extrinsic, 256);
++                }
++                console.log('[chopsticks-patch] Accepting validation error:', validity.asErr.toString());
++                await this.#txpool.submitExtrinsic(extrinsic);
++                return blake2AsHex(extrinsic, 256);
++            } catch (err) {
++                console.log('[chopsticks-patch] Accepting exception:', String(err));
++                await this.#txpool.submitExtrinsic(extrinsic);
++                return blake2AsHex(extrinsic, 256);
++            }
++        }
++        // END PATCH
+         const validity = await this.validateExtrinsic(extrinsic);
+         if (validity.isOk) {
+             await this.#txpool.submitExtrinsic(extrinsic);
+diff --git a/dist/esm/setup.js b/dist/esm/setup.js
+index 00907f13e8258912c3b24063f4a47b74c3fbf991..e91a0a8a1ee756363fc2d708af181116d4922748 100644
+--- a/dist/esm/setup.js
++++ b/dist/esm/setup.js
+@@ -17,7 +17,7 @@ export const processOptions = async (options)=>{
+         defaultLogger.debug(options, 'Setup options - WS');
+         provider = new WsProvider(options.endpoint, 3_000, undefined, options.rpcTimeout);
+     }
+-    const api = new Api(provider);
++    const api = new Api(provider, options.signedExtensions);
+     // setup api hooks
+     api.onFetching(options.hooks?.apiFetching);
+     if (options.db) {

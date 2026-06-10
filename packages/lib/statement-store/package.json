@@ -1,0 +1,72 @@
+{
+  "name": "@identity-backend/statement-store",
+  "version": "0.0.1",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./fake": {
+      "@identity-backend/source": "./src/fake.ts",
+      "default": "./dist/fake.mjs"
+    },
+    "./live": {
+      "@identity-backend/source": "./src/live.ts",
+      "default": "./dist/live.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit --incremental",
+    "test": "vitest run --tagsFilter '!ppn'",
+    "test:run": "vitest run --tagsFilter '!ppn'",
+    "test:ppn": "vitest run --tagsFilter ppn",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "@identity-backend/crypto": "workspace:^",
+    "@noble/hashes": "catalog:",
+    "@novasamatech/sdk-statement": "workspace:^",
+    "@polkadot-api/substrate-bindings": "catalog:",
+    "@polkadot-api/substrate-client": "catalog:",
+    "@polkadot-api/utils": "catalog:",
+    "effect": "catalog:",
+    "polkadot-api": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@identity-backend/descriptors": "workspace:^",
+    "@identity-backend/effect-vitest-gherkin": "workspace:^",
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/testing": "workspace:^",
+    "@identity-backend/rx-effect": "workspace:^",
+    "@identity-backend/vitest-config": "workspace:^",
+    "@polkadot-labs/hdkd": "0.0.19",
+    "@polkadot-labs/hdkd-helpers": "0.0.19",
+    "@vitest/coverage-istanbul": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "testcontainers": "^11.14.0",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./fake": "./dist/fake.mjs",
+      "./live": "./dist/live.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

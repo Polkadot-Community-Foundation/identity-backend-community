@@ -1,0 +1,1 @@
+CREATE INDEX "network_idx" ON "username" USING btree ("network");

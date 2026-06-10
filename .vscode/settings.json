@@ -1,0 +1,33 @@
+{
+  "deno.enable": false,
+  "deno.lint": false,
+  "typescript.tsdk": "./node_modules/typescript/lib",
+  "typescript.enablePromptUseWorkspaceTsdk": true,
+  "json.schemas": [
+    {
+      "fileMatch": [
+        "package.json"
+      ],
+      "url": "https://json.schemastore.org/package.json"
+    }
+  ],
+  "oxc.enable.oxlint": true,
+  "oxc.enable": true,
+  "js/ts.preferences.autoImportFileExcludePatterns": [
+    "repos/**"
+  ],
+  "files.exclude": {
+    "repos/**": true
+  },
+  "files.watcherExclude": {
+    "repos/**": true,
+    "**/node_modules": true,
+    "**/dist": true
+  },
+  "search.exclude": {
+    "repos/**": true,
+    "**/node_modules": true,
+    "**/dist": true,
+    "**/coverage": true
+  }
+}

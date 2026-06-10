@@ -1,0 +1,44 @@
+{
+  "name": "@novasamatech/sdk-statement",
+  "version": "0.6.0",
+  "private": true,
+  "sideEffects": false,
+  "author": "Carlo Sala (https://github.com/carlosala)",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/index.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit --incremental",
+    "test": "vitest run",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "license": "MIT",
+  "dependencies": {
+    "@polkadot-api/substrate-bindings": "catalog:",
+    "@polkadot-api/utils": "catalog:",
+    "polkadot-api": "catalog:"
+  },
+  "devDependencies": {
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/vitest-config": "workspace:^",
+    "@vitest/coverage-v8": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

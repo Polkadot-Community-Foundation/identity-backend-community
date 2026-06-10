@@ -1,0 +1,34 @@
+{
+  "name": "@identity-backend/descriptors",
+  "private": true,
+  "version": "0.1.1",
+  "author": "Ryan Lee <ryan@parity.io>",
+  "type": "module",
+  "main": "./.papi/descriptors/dist/index.js",
+  "types": "./.papi/descriptors/dist/index.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "types": "./.papi/descriptors/dist/index.d.ts",
+      "import": "./.papi/descriptors/dist/index.js",
+      "default": "./.papi/descriptors/dist/index.js"
+    }
+  },
+  "files": [
+    ".papi"
+  ],
+  "scripts": {
+    "clean": "rimraf .papi/descriptors",
+    "papi:update": "bunx papi update",
+    "build": "pnpm run clean && papi"
+  },
+  "dependencies": {
+    "@polkadot-api/descriptors": "file:.papi/descriptors"
+  },
+  "devDependencies": {
+    "polkadot-api": "catalog:"
+  },
+  "peerDependencies": {
+    "polkadot-api": "catalog:"
+  }
+}

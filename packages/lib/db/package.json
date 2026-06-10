@@ -1,0 +1,78 @@
+{
+  "name": "@identity-backend/db",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "version": "0.2.0",
+  "author": "Ryan Lee <ryan@parity.io>",
+  "type": "module",
+  "module": "./dist/esm/mod.js",
+  "main": "./dist/commonjs/mod.js",
+  "types": "./dist/commonjs/mod.d.ts",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "@identity-backend/source": "./src/mod.ts",
+        "types": "./dist/esm/mod.d.ts",
+        "default": "./dist/esm/mod.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/mod.d.ts",
+        "default": "./dist/commonjs/mod.js"
+      }
+    },
+    "./Relations": {
+      "import": {
+        "@identity-backend/source": "./src/relations.ts",
+        "types": "./dist/esm/relations.d.ts",
+        "default": "./dist/esm/relations.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/relations.d.ts",
+        "default": "./dist/commonjs/relations.js"
+      }
+    },
+    "./Schema": {
+      "import": {
+        "@identity-backend/source": "./src/schema.ts",
+        "types": "./dist/esm/schema.d.ts",
+        "default": "./dist/esm/schema.js"
+      },
+      "require": {
+        "types": "./dist/commonjs/schema.d.ts",
+        "default": "./dist/commonjs/schema.js"
+      }
+    }
+  },
+  "files": [
+    "dist"
+  ],
+  "tshy": {
+    "project": "./tsconfig.build.json",
+    "exports": {
+      "./package.json": "./package.json",
+      ".": "./src/mod.ts",
+      "./Relations": "./src/relations.ts",
+      "./Schema": "./src/schema.ts"
+    },
+    "sourceDialects": [
+      "@identity-backend/source"
+    ]
+  },
+  "scripts": {
+    "clean": "rimraf dist .tshy .tshy-build",
+    "build": "tshy",
+    "typecheck": "tsgo --noEmit --incremental",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "devDependencies": {
+    "@identity-backend/oxlint-config": "workspace:^",
+    "drizzle-orm": "1.0.0-beta.22",
+    "effect": "catalog:",
+    "tshy": "^3.1.0"
+  },
+  "peerDependencies": {
+    "effect": "catalog:",
+    "drizzle-orm": "1.0.0-beta.22"
+  }
+}

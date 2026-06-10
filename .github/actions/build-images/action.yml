@@ -1,0 +1,87 @@
+name: Build Docker Images
+
+description: |
+  Builds both the main application image (app-identity) and the E2E startup
+  container (app-e2e) from the same Dockerfile. Runs turbo-prune for all
+  required workspace packages first, then builds both targets. The shared
+  `identity-backend-image` cache scope lets the two targets reuse layers.
+
+inputs:
+  push:
+    description: Whether to push images after build
+    required: false
+    default: "false"
+  version:
+    description: Version/tag for the images
+    required: true
+  gar-registry:
+    description: Google Artifact Registry base URL
+    required: false
+    default: "us-docker.pkg.dev/polkadot-community-foundation/identity-backend"
+  vcs-ref:
+    description: Git SHA for build metadata
+    required: false
+    default: ""
+
+outputs:
+  app-tag:
+    description: Full tag for the app-identity image
+    value: ${{ inputs.gar-registry }}/${{ github.event.repository.name }}:${{ inputs.version }}
+  startup-tag:
+    description: Full tag for the app-e2e (startup) image
+    value: ${{ inputs.gar-registry }}/${{ github.event.repository.name }}:e2e-startup-${{ inputs.version }}
+
+runs:
+  using: composite
+  steps:
+    - name: Configure build outputs
+      id: config
+      shell: bash
+      run: |
+        echo "app-tag=${{ inputs.gar-registry }}/${{ github.event.repository.name }}:${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+        echo "startup-tag=${{ inputs.gar-registry }}/${{ github.event.repository.name }}:e2e-startup-${{ inputs.version }}" >> "$GITHUB_OUTPUT"
+        echo "BUILD_DATE=$(date -u '+%Y-%m-%dT%H:%M:%SZ')" >> "$GITHUB_ENV"
+
+    - name: Install dependencies
+      uses: ./.github/actions/install-deps
+
+    - name: Prune identity-backend-container workspace
+      uses: ./.github/actions/turbo-prune
+      with:
+        filter: identity-backend-container
+        out-dir: .prune-identity
+
+    - name: Prune api-docs workspace
+      uses: ./.github/actions/turbo-prune
+      with:
+        filter: "@polkadot-app/api-docs"
+        out-dir: .prune-api-docs
+
+    - name: Prune e2e startup workspace
+      uses: ./.github/actions/turbo-prune
+      with:
+        filter: identity-backend-e2e-people-startup-container
+        out-dir: .prune-e2e
+
+    - uses: ./.github/actions/setup-buildx
+
+    - name: Prepare turbo-cache build-context
+      shell: bash
+      run: |
+        mkdir -p .turbo
+        echo "TURBO_CACHE_PATH=$(pwd)/.turbo" >> "$GITHUB_ENV"
+        ls -la .turbo
+
+    - name: Bake images
+      uses: docker/bake-action@v6
+      with:
+        source: .
+        files: ./docker-bake.hcl
+        targets: ${{ inputs.push == 'true' && 'publish' || 'build-all' }}
+        push: ${{ inputs.push == 'true' }}
+        load: ${{ inputs.push != 'true' }}
+        set: |
+          app-identity.tags=${{ steps.config.outputs.app-tag }}
+          app-e2e.tags=${{ steps.config.outputs.startup-tag }}
+      env:
+        VCS_REF: ${{ inputs.vcs-ref }}

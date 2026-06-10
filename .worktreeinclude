@@ -1,0 +1,10 @@
+# Worktree include whitelist
+# Only files matching these patterns (AND gitignored) are copied by wt step copy-ignored
+# This eliminates cold starts by sharing the Turborepo cache between worktrees
+
+# Include all files in .turbo recursively
+.turbo
+.turbo/**
+
+dist
+dist/**

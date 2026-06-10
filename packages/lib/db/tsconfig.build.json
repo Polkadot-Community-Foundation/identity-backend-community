@@ -1,0 +1,10 @@
+{
+  "extends": "./tsconfig.json",
+  "compilerOptions": {
+    "incremental": true,
+    "verbatimModuleSyntax": false,
+    "declarationMap": false,
+    "sourceMap": false,
+    "stripInternal": true
+  }
+}

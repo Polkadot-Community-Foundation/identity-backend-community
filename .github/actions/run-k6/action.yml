@@ -1,0 +1,216 @@
+name: Run k6 Load Test
+description: |
+  Install k6, run a k6 load test script with JSON output, compare results
+  against a committed baseline, and upload artifacts. Follows parity-default
+  runner constraints: userns-remap safe (named volumes, docker cp), compose
+  v2 plugin.
+
+inputs:
+  script:
+    description: Path to the compiled k6 .mjs script (e.g. dist/search.mjs)
+    required: true
+  base-url:
+    description: Base URL of the target application
+    required: true
+  baseline:
+    description: |
+      Path to the baseline JSON file for regression comparison. If omitted,
+      no comparison is performed — the run is purely informational.
+    required: false
+    default: ""
+  baseline-metric:
+    description: |
+      k6 metric name to compare against the baseline. Use the bucketed form
+      `http_req_duration{endpoint:usernames_search}` to isolate a specific
+      endpoint's latency from incidental traffic. Defaults to the search
+      bucket since that's what the load workflow exercises by default.
+    required: false
+    default: "http_req_duration{endpoint:usernames_search}"
+  jwt-secret:
+    description: HMAC secret for JWT generation (used by authenticated scripts)
+    required: false
+    default: ""
+  max-duration:
+    description: |
+      Upper bound on k6 wall-clock runtime. Passed to k6 as --duration only
+      when the script's scenarios are open-ended; otherwise serves as a
+      shell-level safety cap via `timeout`. Format: any duration `timeout(1)`
+      accepts (e.g. "10m", "300s").
+    required: false
+    default: "10m"
+
+runs:
+  using: composite
+  steps:
+    - name: Install k6
+      shell: bash
+      env:
+        K6_VERSION: v1.3.0
+      run: |
+        set -euo pipefail
+        if command -v k6 &>/dev/null; then
+          echo "k6 already installed: $(k6 version)"
+          exit 0
+        fi
+        # Map uname → k6 release naming.
+        raw_os="$(uname -s | tr '[:upper:]' '[:lower:]')"
+        raw_arch="$(uname -m)"
+        case "$raw_os" in
+          linux) os=linux ;;
+          darwin) os=macos ;;
+          *) echo "Unsupported OS: $raw_os" >&2; exit 1 ;;
+        esac
+        case "$raw_arch" in
+          x86_64|amd64) arch=amd64 ;;
+          aarch64|arm64) arch=arm64 ;;
+          *) echo "Unsupported arch: $raw_arch" >&2; exit 1 ;;
+        esac
+        slug="k6-${K6_VERSION}-${os}-${arch}"
+        url="https://github.com/grafana/k6/releases/download/${K6_VERSION}/${slug}.tar.gz"
+        echo "Downloading k6 from ${url}"
+        # /usr/local/bin is root-owned on the runner; sudo as in load-test-local.sh.
+        curl -fsSL "$url" | sudo tar xz --strip-components=1 -C /usr/local/bin "${slug}/k6"
+        k6 version
+
+    - name: Run k6 load test
+      id: run-test
+      shell: bash
+      env:
+        JWT_SECRET: ${{ inputs.jwt-secret }}
+        MAX_DURATION: ${{ inputs.max-duration }}
+      run: |
+        set -euo pipefail
+
+        mkdir -p /tmp/k6-results
+
+        # `timeout --preserve-status` returns k6's own exit code on normal
+        # exit and exit 124 on the wall-clock cap. Either way we keep going
+        # so the baseline comparison + artifact upload steps still run.
+        set +e
+        timeout --preserve-status "$MAX_DURATION" \
+          k6 run "${{ inputs.script }}" \
+            --env BASE_URL="${{ inputs.base-url }}" \
+            ${JWT_SECRET:+--env JWT_SECRET="$JWT_SECRET"} \
+            --out json=/tmp/k6-results/results.json \
+            --summary-export=/tmp/k6-results/summary.json
+        k6_exit=$?
+        set -e
+
+        echo "k6 exit code: ${k6_exit}"
+        ls -la /tmp/k6-results/
+
+        if [ "$k6_exit" = "124" ]; then
+          echo "::error::k6 run exceeded max-duration (${MAX_DURATION}) and was killed"
+          exit 124
+        fi
+        # k6 exits 99 when a threshold fails. Surface as a non-fatal warning
+        # so the workflow can still emit summary + artifacts. The Phase 2
+        # `continue-on-error` at the caller handles overall PR signalling.
+        if [ "$k6_exit" = "99" ]; then
+          echo "::warning::k6 thresholds were crossed (exit 99). See summary for details."
+          exit 0
+        fi
+        exit "$k6_exit"
+
+    - name: Compare against baseline
+      if: ${{ inputs.baseline != '' }}
+      id: compare-baseline
+      shell: bash
+      env:
+        # Which k6 metric to compare. The search scripts tag every request
+        # with `endpoint:usernames_search`, so the bucketed metric isolates
+        # search latency from any other traffic. Override per script if
+        # needed.
+        METRIC: ${{ inputs.baseline-metric }}
+      run: |
+        set -euo pipefail
+
+        BASELINE="${{ inputs.baseline }}"
+        SUMMARY="/tmp/k6-results/summary.json"
+
+        if [ ! -f "$BASELINE" ]; then
+          echo "::warning::Baseline file ${BASELINE} not found — skipping comparison"
+          echo "regression=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        if [ ! -f "$SUMMARY" ]; then
+          echo "::error::Summary file ${SUMMARY} not found — cannot compare"
+          echo "regression=true" >> "$GITHUB_OUTPUT"
+          exit 1
+        fi
+
+        # Extract p95 / p99 from the run's bucketed metric and error rate
+        # from the bucketed failure rate. jq's lookup-by-string handles the
+        # `{endpoint:...}` braces in the metric key.
+        RUN_P95=$(jq -r --arg m "$METRIC" '.metrics[$m].values["p(95)"] // empty' "$SUMMARY")
+        RUN_P99=$(jq -r --arg m "$METRIC" '.metrics[$m].values["p(99)"] // empty' "$SUMMARY")
+        FAIL_METRIC="${METRIC/http_req_duration/http_req_failed}"
+        RUN_ERR=$(jq -r --arg m "$FAIL_METRIC" '.metrics[$m].values.rate // 0' "$SUMMARY")
+
+        # Baseline mirrors the same shape:
+        # { "http_req_duration": { "p(95)": N, "p(99)": N },
+        #   "http_req_failed":   { "rate": N } }
+        BASE_P95=$(jq -r '.http_req_duration["p(95)"] // empty' "$BASELINE")
+        BASE_ERR=$(jq -r '.http_req_failed.rate // 0' "$BASELINE")
+
+        echo "Metric:      $METRIC"
+        echo "Current run: p95=${RUN_P95}ms  p99=${RUN_P99}ms  error_rate=${RUN_ERR}"
+        echo "Baseline:    p95=${BASE_P95}ms  error_rate=${BASE_ERR}"
+
+        if [ -z "$RUN_P95" ]; then
+          echo "::warning::Metric ${METRIC} not present in run summary — cannot compare. Did the script tag requests with endpoint:usernames_search?"
+          echo "regression=false" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        regression=false
+
+        # p95 regression: fail if > 1.5x baseline
+        if [ -n "$BASE_P95" ]; then
+          THRESHOLD=$(echo "$BASE_P95 * 1.5" | bc -l)
+          if [ "$(echo "$RUN_P95 > $THRESHOLD" | bc -l)" -eq 1 ]; then
+            echo "::error::p95 regression: ${RUN_P95}ms > ${THRESHOLD}ms (1.5x baseline ${BASE_P95}ms)"
+            regression=true
+          else
+            echo "✓ p95 within threshold"
+          fi
+        fi
+
+        # Error rate regression: fail if > max(2x baseline, 0.05)
+        ERROR_CAP=$(echo "if ($BASE_ERR * 2 > 0.05) $BASE_ERR * 2 else 0.05" | bc -l)
+        if [ "$(echo "$RUN_ERR > $ERROR_CAP" | bc -l)" -eq 1 ]; then
+          echo "::error::Error rate regression: ${RUN_ERR} > ${ERROR_CAP} (max of 2x baseline or 5%)"
+          regression=true
+        else
+          echo "✓ Error rate within threshold"
+        fi
+
+        echo "regression=$regression" >> "$GITHUB_OUTPUT"
+
+        if [ "$regression" = "true" ]; then
+          exit 1
+        fi
+
+    - name: Upload k6 results
+      if: ${{ always() }}
+      uses: actions/upload-artifact@v4
+      with:
+        name: k6-results-${{ github.run_id }}
+        path: /tmp/k6-results/*
+        retention-days: 7
+        if-no-files-found: warn
+
+    - name: Upload k6 HTML report
+      if: ${{ always() }}
+      shell: bash
+      run: |
+        if [ -f /tmp/k6-results/summary.json ]; then
+          # Generate a simple markdown summary for the GHA summary
+          jq -r '
+            "## k6 Load Test Results\n",
+            "| Metric | Value |",
+            "|--------|-------|",
+            (.metrics | to_entries[] | select(.value.values) | "| \(.key) | \(.value.values | to_entries | map("\(.key)=\(.value)") | join(", ")) |")
+          ' /tmp/k6-results/summary.json >> "$GITHUB_STEP_SUMMARY"
+        fi

@@ -1,0 +1,28 @@
+{
+  "extends": "@total-typescript/tsconfig/bundler/dom/app",
+  "compilerOptions": {
+    "exactOptionalPropertyTypes": true,
+    "incremental": true,
+    "customConditions": [
+      "@identity-backend/source"
+    ],
+    "paths": {
+      "#root/*": [
+        "./src/*"
+      ]
+    },
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ]
+  },
+  "include": [
+    "src/**/*"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

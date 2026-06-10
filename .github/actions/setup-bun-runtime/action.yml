@@ -1,0 +1,15 @@
+name: Setup Bun runtime
+description: Install Bun
+
+inputs:
+  bun-version:
+    description: Bun version
+    required: false
+    default: latest
+
+runs:
+  using: composite
+  steps:
+    - uses: oven-sh/setup-bun@v2
+      with:
+        bun-version: ${{ inputs.bun-version }}

@@ -1,0 +1,1 @@
+DROP TABLE "polkadot_app"."username";

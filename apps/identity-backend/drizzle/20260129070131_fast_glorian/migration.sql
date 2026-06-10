@@ -1,0 +1,2 @@
+ALTER TABLE "polkadot_app"."individuality_usernames" ADD COLUMN "source" text DEFAULT 'INTERNAL' NOT NULL;--> statement-breakpoint
+CREATE INDEX "individuality_username_source_idx" ON "polkadot_app"."individuality_usernames" USING btree ("source");

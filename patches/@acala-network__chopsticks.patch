@@ -1,0 +1,105 @@
+diff --git a/dist/cjs/context.js b/dist/cjs/context.js
+index 338b22edc564485c91ec45a1212155f61f773840..81823dc2f303be11769e4c1bbf45625aa77e8155 100644
+--- a/dist/cjs/context.js
++++ b/dist/cjs/context.js
+@@ -97,6 +97,15 @@ const setupContext = async (argv, overrideParent = false)=>{
+             genesis = new _chopstickscore.GenesisProvider(chainSpec);
+         }
+     }
++    // PATCHED: load custom signed extensions from well-known path when config requires it
++    let signedExtensions;
++    if (argv['signed-extensions']) {
++        try {
++            signedExtensions = require('/app/chopsticks-signed-extensions.cjs').popTestnetSignedExtensions;
++        } catch (err) {
++            console.warn('[chopsticks-patch] Failed to load custom signed extensions:', err);
++        }
++    }
+     const chain = await (0, _chopstickscore.setup)({
+         endpoint: argv.endpoint,
+         block: argv.block,
+@@ -112,6 +121,7 @@ const setupContext = async (argv, overrideParent = false)=>{
+         processQueuedMessages: argv['process-queued-messages'],
+         saveBlocks: argv['save-blocks'],
+         rpcTimeout: argv['rpc-timeout'],
++        signedExtensions,
+         hooks: {
+             apiFetching: _logger.apiFetching
+         }
+diff --git a/dist/cjs/schema/index.js b/dist/cjs/schema/index.js
+index 8c1e5a0237d830bec6468e2d935830a9362e0b04..2462eb8bf9ef28791a8e06fe6a21972a8490dd16 100644
+--- a/dist/cjs/schema/index.js
++++ b/dist/cjs/schema/index.js
+@@ -74,6 +74,9 @@ const configSchema = _zod.z.object({
+     'mock-signature-host': _zod.z.boolean({
+         description: 'Mock signature host so any signature starts with 0xdeadbeef and filled by 0xcd is considered valid'
+     }).optional(),
++    'signed-extensions': _zod.z.boolean({
++        description: 'Load custom signed extensions from /app/chopsticks-signed-extensions.cjs'
++    }).optional(),
+     'max-memory-block-count': _zod.z.number().optional(),
+     db: _zod.z.string({
+         description: 'Path to database'
+diff --git a/dist/esm/context.js b/dist/esm/context.js
+index 10393437467285a73057f448f873bc90dc361dd2..b2faa23cb4851853ed6b43c454a2dbb8063cc496 100644
+--- a/dist/esm/context.js
++++ b/dist/esm/context.js
+@@ -33,6 +33,16 @@ export const setupContext = async (argv, overrideParent = false)=>{
+             genesis = new GenesisProvider(chainSpec);
+         }
+     }
++    // PATCHED: load custom signed extensions from well-known path when config requires it
++    let signedExtensions;
++    if (argv['signed-extensions']) {
++        try {
++            const extMod = await import('/app/chopsticks-signed-extensions.cjs');
++            signedExtensions = extMod.popTestnetSignedExtensions;
++        } catch (err) {
++            logger.warn({ err }, 'Failed to load custom signed extensions');
++        }
++    }
+     const chain = await setup({
+         endpoint: argv.endpoint,
+         block: argv.block,
+@@ -48,6 +58,7 @@ export const setupContext = async (argv, overrideParent = false)=>{
+         processQueuedMessages: argv['process-queued-messages'],
+         saveBlocks: argv['save-blocks'],
+         rpcTimeout: argv['rpc-timeout'],
++        signedExtensions,
+         hooks: {
+             apiFetching
+         }
+diff --git a/dist/esm/schema/index.js b/dist/esm/schema/index.js
+index 8a6396b82b817a9bcaa3aaf54c5f64ff9d4a18e0..fced6d7488065226a9983ed86f67bddac96987a5 100644
+--- a/dist/esm/schema/index.js
++++ b/dist/esm/schema/index.js
+@@ -42,6 +42,9 @@ export const configSchema = z.object({
+     'mock-signature-host': z.boolean({
+         description: 'Mock signature host so any signature starts with 0xdeadbeef and filled by 0xcd is considered valid'
+     }).optional(),
++    'signed-extensions': z.boolean({
++        description: 'Load custom signed extensions from /app/chopsticks-signed-extensions.cjs'
++    }).optional(),
+     'max-memory-block-count': z.number().optional(),
+     db: z.string({
+         description: 'Path to database'
+diff --git a/dist/esm/server.js b/dist/esm/server.js
+index d78acef3e32424e8007595262aca780680db77fc..223df4d7976a2fdcff19551e98d7e1e24efcad99 100644
+--- a/dist/esm/server.js
++++ b/dist/esm/server.js
+@@ -168,6 +168,15 @@ export const createServer = async (handler, port, host)=>{
+         throw new Error(`Failed to create WebsocketServer at port ${port}`);
+     }
+     wss.on('connection', (ws)=>{
++        // PATCHED: WebSocket heartbeat handling
++        ws.on('ping', (data)=>ws.pong(data));
++        const heartbeatInterval = setInterval(() => {
++            if (ws.readyState === WebSocket.OPEN) ws.ping();
++        }, 30000);
++        const clearHeartbeat = () => clearInterval(heartbeatInterval);
++        ws.on('close', clearHeartbeat);
++        ws.on('error', clearHeartbeat);
++        // END PATCH
+         wsLogger.debug('New connection');
+         const send = (data)=>{
+             if (ws.readyState === WebSocket.OPEN) {

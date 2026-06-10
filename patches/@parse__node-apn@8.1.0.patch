@@ -1,0 +1,63 @@
+diff --git a/index.d.ts b/index.d.ts
+index 3cb375dd4caf74ace09f3c335504598fa1e1b814..84536b99c02f47c9868c2fa6fc41e47220f70351 100644
+--- a/index.d.ts
++++ b/index.d.ts
+@@ -142,6 +142,14 @@ interface Aps {
+ 
+ export interface ResponseSent {
+   device: string;
++  /** Apple-generated unique identifier for this notification request */
++  'apns-unique-id'?: string;
++  /** Notification ID supplied by client (notification.id) */
++  'apns-id'?: string;
++  /** Request ID supplied by client (notification.requestId) */
++  'apns-request-id'?: string;
++  /** Channel ID for broadcast notifications */
++  'apns-channel-id'?: string;
+ }
+ 
+ export interface BroadcastResponse {
+@@ -153,7 +161,7 @@ export interface BroadcastResponse {
+   "channels"?: string[];
+ }
+ 
+-export interface LoggerResponse extends Partial<ResponseSent>, Partial<BroadcastResponse> {}
++export interface LoggerResponse extends Partial<ResponseSent>, Partial<BroadcastResponse>, ApnsResponseHeaders {}
+ 
+ export interface ResponseFailure {
+   device: string;
+@@ -163,13 +171,33 @@ export interface ResponseFailure {
+     reason: string;
+     timestamp?: string;
+   };
++  /** Apple-generated unique identifier for this notification request */
++  'apns-unique-id'?: string;
++  /** Notification ID supplied by client (notification.id) */
++  'apns-id'?: string;
++  /** Request ID supplied by client (notification.requestId) */
++  'apns-request-id'?: string;
++  /** Channel ID for broadcast notifications */
++  'apns-channel-id'?: string;
+ }
+ 
+ export interface BroadcastResponseFailure extends Omit<ResponseFailure, "device"> {
+   bundleId: string;
+ }
+ 
+-export interface LoggerResponseFailure extends Partial<ResponseFailure>, Partial<BroadcastResponseFailure> {}
++/** Base interface for APNs response headers returned on all responses */
++export interface ApnsResponseHeaders {
++  /** Apple-generated unique identifier for this notification request */
++  'apns-unique-id'?: string;
++  /** Notification ID supplied by client (notification.id) */
++  'apns-id'?: string;
++  /** Request ID supplied by client (notification.requestId) */
++  'apns-request-id'?: string;
++  /** Channel ID for broadcast notifications */
++  'apns-channel-id'?: string;
++}
++
++export interface LoggerResponseFailure extends Partial<ResponseFailure>, Partial<BroadcastResponseFailure>, ApnsResponseHeaders {}
+ 
+ export interface Responses<R,F> {
+   sent: R[];

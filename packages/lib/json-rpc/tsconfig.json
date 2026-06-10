@@ -1,0 +1,17 @@
+{
+  "$schema": "https://json.schemastore.org/tsconfig",
+  "extends": "@total-typescript/tsconfig/bundler/dom/library-monorepo",
+  "compilerOptions": {
+    "customConditions": [
+      "@identity-backend/source"
+    ]
+  },
+  "include": [
+    "src"
+  ],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

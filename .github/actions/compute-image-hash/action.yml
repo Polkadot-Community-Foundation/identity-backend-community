@@ -1,0 +1,73 @@
+name: Compute Image Hash
+description: |
+  Computes a 16-char content hash for a docker image build. The hash
+  changes iff anything that could affect the built image changes — the
+  turbo task hash (which covers the task's file inputs + all transitive
+  workspace dep inputs + env vars declared in turbo.json) plus explicit
+  paths for docker-specific files that turbo doesn't see (Dockerfile,
+  .dockerignore, docker-bake.hcl, patches).
+
+  Use turbo-filters for images whose contents come from a turbo-built
+  workspace package. Use paths-only for standalone images (e.g. chopsticks)
+  whose Dockerfile pulls files directly from the repo.
+
+inputs:
+  turbo-filters:
+    description: Comma-separated turbo filters whose build-task hash is included
+    required: false
+    default: ""
+  paths:
+    description: |
+      Newline-separated git pathspecs to include. Wildcards are supported
+      (matched via git ls-files), so the list can mirror the Dockerfile's
+      COPY globs exactly instead of enumerating each file.
+    required: false
+    default: ""
+
+outputs:
+  hash:
+    description: 16-char hex hash
+    value: ${{ steps.hash.outputs.hash }}
+
+runs:
+  using: composite
+  steps:
+    - id: hash
+      shell: bash
+      env:
+        TURBO_FILTERS: ${{ inputs.turbo-filters }}
+        PATHS: ${{ inputs.paths }}
+      run: |
+        set -eu
+        components=""
+
+        if [ -n "$PATHS" ]; then
+          mapfile -t path_array < <(printf '%s\n' "$PATHS" | sed '/^[[:space:]]*$/d')
+          tree=$(git ls-files -s -- "${path_array[@]}")
+          components+="$(printf '%s' "$tree" | sha256sum | cut -c1-16)"
+          echo "Paths: $(printf '%s' "$tree" | wc -l) git entries"
+        fi
+
+        if [ -n "$TURBO_FILTERS" ]; then
+          IFS=',' read -ra filters <<< "$TURBO_FILTERS"
+          for f in "${filters[@]}"; do
+            task_id="${f}#build"
+            task_hash=$(pnpm exec turbo run build --filter="$f" --dry=json \
+              | jq -er --arg tid "$task_id" '.tasks[] | select(.taskId == $tid) | .hash')
+            if [ -z "$task_hash" ]; then
+              echo "ERROR: no task hash for $task_id" >&2
+              exit 1
+            fi
+            components+="$task_hash"
+            echo "Turbo $task_id: $task_hash"
+          done
+        fi
+
+        if [ -z "$components" ]; then
+          echo "ERROR: must provide turbo-filters or paths" >&2
+          exit 1
+        fi
+
+        hash=$(printf '%s' "$components" | sha256sum | cut -c1-16)
+        echo "hash=$hash" >> "$GITHUB_OUTPUT"
+        echo "Combined hash: $hash"

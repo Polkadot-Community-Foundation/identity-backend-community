@@ -1,0 +1,6 @@
+#!/usr/bin/env sh
+
+# Validate symlinks resolve correctly before committing
+scripts/validate-symlinks.sh
+
+pnpm precommit

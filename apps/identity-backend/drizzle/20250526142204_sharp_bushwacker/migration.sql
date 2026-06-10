@@ -1,0 +1,1 @@
+ALTER TABLE "polkadot_app"."apple-attestations" RENAME COLUMN "signCount" TO "sign_count";

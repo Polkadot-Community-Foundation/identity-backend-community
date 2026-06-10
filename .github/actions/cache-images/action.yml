@@ -1,0 +1,99 @@
+name: Cache Docker Images
+description: |
+  Cache a set of docker images via actions/cache: one tarball per image,
+  keyed by the list's sha256. Loaded from cache when hit; pulled + saved
+  on miss. Supply images either as a newline-separated list or via a
+  compose file (resolved with `docker compose config --images`).
+
+inputs:
+  images:
+    description: Newline-separated list of image refs to cache
+    required: false
+    default: ""
+  compose-file:
+    description: Path to a compose file whose images should be cached
+    required: false
+    default: ""
+
+runs:
+  using: composite
+  steps:
+    - name: Resolve image list
+      id: images
+      shell: bash
+      env:
+        IMAGES_INPUT: ${{ inputs.images }}
+        COMPOSE_FILE: ${{ inputs.compose-file }}
+      run: |
+        set -eu
+        if [ -n "$COMPOSE_FILE" ] && [ -n "$IMAGES_INPUT" ]; then
+          echo "ERROR: provide exactly one of images or compose-file, not both" >&2
+          exit 1
+        fi
+        if [ -n "$COMPOSE_FILE" ]; then
+          IMAGES=$(docker compose -f "$COMPOSE_FILE" config --images | sort -u)
+        elif [ -n "$IMAGES_INPUT" ]; then
+          IMAGES=$(printf '%s\n' "$IMAGES_INPUT" | sed '/^[[:space:]]*$/d' | sort -u)
+        else
+          echo "ERROR: must provide images or compose-file" >&2
+          exit 1
+        fi
+        echo "images<<EOF" >> "$GITHUB_OUTPUT"
+        echo "$IMAGES" >> "$GITHUB_OUTPUT"
+        echo "EOF" >> "$GITHUB_OUTPUT"
+        LIST_HASH=$(echo "$IMAGES" | sha256sum | cut -c1-16)
+        echo "list-hash=$LIST_HASH" >> "$GITHUB_OUTPUT"
+        echo "Resolved $(echo "$IMAGES" | wc -l) images (list-hash $LIST_HASH):"
+        echo "$IMAGES"
+
+    - name: Check if all images are already in local docker daemon
+      id: daemon-check
+      shell: bash
+      env:
+        IMAGES: ${{ steps.images.outputs.images }}
+      run: |
+        set -eu
+        missing=0
+        while IFS= read -r img; do
+          [ -z "$img" ] && continue
+          docker image inspect "$img" >/dev/null 2>&1 || { missing=1; echo "missing in daemon: $img"; }
+        done <<< "$IMAGES"
+        if [ $missing -eq 0 ]; then
+          echo "✓ all images present in local docker daemon, skipping cache restore + load"
+          echo "hit=true" >> "$GITHUB_OUTPUT"
+        else
+          echo "hit=false" >> "$GITHUB_OUTPUT"
+        fi
+
+    - name: Restore image cache
+      id: cache
+      if: steps.daemon-check.outputs.hit != 'true'
+      uses: actions/cache@v4
+      with:
+        path: /tmp/compose-images
+        key: compose-images-${{ steps.images.outputs.list-hash }}
+        restore-keys: |
+          compose-images-
+
+    - name: Load cached images, pull anything missing
+      if: steps.daemon-check.outputs.hit != 'true'
+      shell: bash
+      env:
+        IMAGES: ${{ steps.images.outputs.images }}
+        DIR: /tmp/compose-images
+      run: |
+        set -eu
+        mkdir -p "$DIR"
+        while IFS= read -r img; do
+          [ -z "$img" ] && continue
+          safe=$(echo "$img" | tr '/:@' '___')
+          tar="$DIR/$safe.tar"
+          if [ -f "$tar" ]; then
+            echo "load  $img  ($(stat -c%s "$tar") bytes)"
+            docker load -i "$tar" >/dev/null
+          else
+            echo "pull  $img  (cache miss)"
+            docker pull "$img"
+            docker save "$img" > "$tar"
+          fi
+        done <<< "$IMAGES"

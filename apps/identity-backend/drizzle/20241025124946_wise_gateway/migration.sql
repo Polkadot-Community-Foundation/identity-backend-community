@@ -1,0 +1,1 @@
+ALTER TABLE "apple-attestations" ADD COLUMN "signCount" integer DEFAULT 0 NOT NULL;

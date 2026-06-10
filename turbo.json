@@ -1,0 +1,130 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "tasks": {
+    "build": {
+      "outputLogs": "new-only",
+      "inputs": [
+        "src/**",
+        "tsconfig.json",
+        "tsconfig.build.json",
+        "tsconfig.*.json",
+        "package.json",
+        "vite.config.*",
+        "tsdown.config.*",
+        "tsup.config.*",
+        "rollup.config.*",
+        "rolldown.config.*",
+        "esbuild.config.*",
+        "unbuild.config.*",
+        "rsbuild.config.*",
+        "rspack.config.*",
+        "webpack.config.*",
+        "swc.config.*",
+        ".swcrc",
+        "babel.config.*",
+        ".babelrc*",
+        "build.config.*"
+      ],
+      "outputs": [
+        "dist/**",
+        ".tshy/**",
+        ".tshy-build/**"
+      ],
+      "dependsOn": [
+        "^build"
+      ]
+    },
+    "typecheck": {
+      "outputLogs": "errors-only",
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tsconfig.json",
+        "tsconfig.*.json"
+      ],
+      "outputs": [],
+      "cache": false
+    },
+    "test": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "vitest.config.ts",
+        "vitest.config.*",
+        "src/**/*.test.ts",
+        "src/**/*.spec.ts",
+        "tests/**/*.test.ts",
+        "tests/**/*.spec.ts",
+        "$TURBO_ROOT$/**/vitest-config/lib/**"
+      ],
+      "outputLogs": "errors-only",
+      "dependsOn": [
+        "^build"
+      ],
+      "outputs": [
+        "coverage/**",
+        "reports/vitest-output.json"
+      ],
+      "env": [
+        "NODE_ENV",
+        "CI"
+      ],
+      "cache": true
+    },
+    "mutation": {
+      "dependsOn": [
+        "^build"
+      ],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "stryker.config.json",
+        "vitest.config.ts",
+        "vitest.setup.ts",
+        "reports/stryker-incremental.json"
+      ],
+      "outputs": [
+        "reports/mutation-report.html",
+        "reports/mutation-report.json"
+      ],
+      "env": [
+        "NODE_ENV",
+        "CI"
+      ],
+      "cache": true
+    },
+    "lint": {
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "tsconfig.json",
+        "tsconfig.*.json",
+        "$TURBO_ROOT$/.oxlintrc.json",
+        "$TURBO_ROOT$/packages/tooling/oxlint-config/**"
+      ],
+      "outputs": [],
+      "env": [
+        "NODE_ENV"
+      ],
+      "cache": true
+    },
+    "api:check": {
+      "outputLogs": "errors-only",
+      "inputs": [
+        "src/**",
+        "api-extractor.json",
+        "etc/*.api.md",
+        "tsconfig.build.json"
+      ],
+      "outputs": [
+        "dist/*.d.ts",
+        "etc/*.api.md",
+        "temp/**"
+      ],
+      "dependsOn": ["build"]
+    },
+    "dev": {
+      "cache": false,
+      "persistent": true
+    },
+    "clean": {
+      "cache": false
+    }
+  }
+}

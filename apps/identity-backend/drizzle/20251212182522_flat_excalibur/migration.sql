@@ -1,0 +1,1 @@
+ALTER TABLE "polkadot_app"."individuality_usernames" ADD COLUMN "popme_status" text;

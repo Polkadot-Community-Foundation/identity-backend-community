@@ -1,0 +1,28 @@
+{
+  "name": "@identity-backend/oxlint-config",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "author": "Ryan Lee <ryan@parity.io>",
+  "type": "module",
+  "exports": {
+    "./package.json": "./package.json",
+    "./base": "./src/oxlint-config.base.ts"
+  },
+  "files": [
+    "src"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "typecheck": "tsgo --noEmit --incremental",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "oxlint": "^1.60.0",
+    "@identity-backend/oxlint-plugin": "workspace:^"
+  },
+  "devDependencies": {},
+  "peerDependencies": {
+    "oxlint": "^1.60.0"
+  }
+}

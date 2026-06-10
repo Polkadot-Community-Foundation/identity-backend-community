@@ -1,0 +1,20 @@
+receivers:
+  otlpjsonfile:
+    include:
+      - /traces/*.jsonl
+    start_at: beginning
+
+exporters:
+  otlp:
+    endpoint: otel-replay-jaeger:4317
+    tls:
+      insecure: true
+
+service:
+  pipelines:
+    traces:
+      receivers: [otlpjsonfile]
+      exporters: [otlp]
+  telemetry:
+    logs:
+      level: info

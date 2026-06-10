@@ -1,0 +1,8 @@
+#!/bin/bash
+# Git commit-msg hook to validate commit messages with commitlint
+
+set -e
+
+pnpm exec commitlint --edit "$1"
+
+exit 0

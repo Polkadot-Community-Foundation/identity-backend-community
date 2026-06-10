@@ -1,0 +1,231 @@
+/**
+ * @see {@link https://developer.apple.com/documentation/devicecheck/attestation-object-validation-guide}
+ */
+import { verifyAttestation } from '@/attestation.js'
+import { describe, expect, it } from '@effect/vitest'
+import { decodeBase64, encodeBase64 } from '@std/encoding'
+import { Effect, Either } from 'effect'
+
+describe('App Attest Attestation', () => {
+  const expectedReciept = 'MIAGCSqGSIb3DQEHAqCAMIACAQExDzANBglghkgBZQMEAgEFADCABgkqhkiG9w0BBwGggCSABIID6DGC' +
+    'BGowMQIBAgIBAQQpVjhINkxROTQ0OC5pby51ZWJlbGFja2VyLkFwcEF0dGVzdEV4YW1wbGUwggNCAgED' +
+    'AgEBBIIDODCCAzQwggK6oAMCAQICBgGNdc2eKzAKBggqhkjOPQQDAjBPMSMwIQYDVQQDDBpBcHBsZSBB' +
+    'cHAgQXR0ZXN0YXRpb24gQ0EgMTETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5p' +
+    'YTAeFw0yNDAyMDMyMDI3MDZaFw0yNTAxMDgwNjIxMDZaMIGRMUkwRwYDVQQDDEBiM2ZkNzdlMGM2ZGUx' +
+    'MDQ2NDM2NGEwYWYzOTM3ZmU4ZDk4MGQ4NjlhMDNjMWQ1ZDlmMWMyOWY0ZjI5YmMxNTQ4MRowGAYDVQQL' +
+    'DBFBQUEgQ2VydGlmaWNhdGlvbjETMBEGA1UECgwKQXBwbGUgSW5jLjETMBEGA1UECAwKQ2FsaWZvcm5p' +
+    'YTBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABNRtEx32xM1MIen5W+E+s4hJYEGrrG97PR7ZZM2gUd3W' +
+    'I9zsEDRBFHoG506zbAmxd20vHxcbsKY4XX9HEDm0r++jggE9MIIBOTAMBgNVHRMBAf8EAjAAMA4GA1Ud' +
+    'DwEB/wQEAwIE8DCBigYJKoZIhvdjZAgFBH0we6QDAgEKv4kwAwIBAb+JMQMCAQC/iTIDAgEBv4kzAwIB' +
+    'Ab+JNCsEKVY4SDZMUTk0NDguaW8udWViZWxhY2tlci5BcHBBdHRlc3RFeGFtcGxlpQYEBHNrcyC/iTYD' +
+    'AgEFv4k3AwIBAL+JOQMCAQC/iToDAgEAv4k7AwIBADBXBgkqhkiG92NkCAcESjBIv4p4CAQGMTcuMi4x' +
+    'v4hQBwIFAP////+/insHBAUyMUM2Nr+KfQgEBjE3LjIuMb+KfgMCAQC/iwwPBA0yMS4zLjY2LjAuMCww' +
+    'MDMGCSqGSIb3Y2QIAgQmMCShIgQgzk1Jre9eu4avmzNyG5DgTo3fo2b+ZmWQl+Vmr1J2bhkwCgYIKoZI' +
+    'zj0EAwIDaAAwZQIweVgLQok+pOYX5BKcyV/cwfZc9KtJGePI0jnJpIY2p4iQeUsklCPchScwoDwmwJew' +
+    'AjEAijQd4Zq1UTJCGqtL1SD3/cdsxdMZerFFx2dPdesD9q3DhRjPCwr+8QRtEi02tuwoMCgCAQQCAQEE' +
+    'IJTfB82QsJa+WtDSLDPaHo12cDXKYxcl4sZ4byAUmZQhMGACAQUCAQEEWDFma3lDaFUxQjA1aTA1blF6' +
+    'bzkyUStqNlZsNHpTd243K1VvSHptV3RyQm43WXJoME01MW94UXcEgYZteklXa1NQWGorVEk4L2M0VEc4' +
+    'd0JOaGRXVklnRWxRPT0wDgIBBgIBAQQGQVRURVNUMA8CAQcCAQEEB3NhbmRib3gwIAIBDAIBAQQYMjAy' +
+    'NC0wMi0wNFQyMDoyNzowNi4xOTNaMCACARUCAQEEGDIwMjQtMDUtMDRUMjA6Mjc6MDYuMTkzWgAAAAAA' +
+    'AKCAMIIDrTCCA1SgAwIBAgIQfc2ZUS2Mfc0WC94OOIF6QjAKBggqhkjOPQQDAjB8MTAwLgYDVQQDDCdB' +
+    'cHBsZSBBcHBsaWNhdGlvbiBJbnRlZ3JhdGlvbiBDQSA1IC0gRzExJjAkBgNVBAsMHUFwcGxlIENlcnRp' +
+    'ZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUzAeFw0yMzAz' +
+    'MDgxNTI5MTdaFw0yNDA0MDYxNTI5MTZaMFoxNjA0BgNVBAMMLUFwcGxpY2F0aW9uIEF0dGVzdGF0aW9u' +
+    'IEZyYXVkIFJlY2VpcHQgU2lnbmluZzETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwWTAT' +
+    'BgcqhkjOPQIBBggqhkjOPQMBBwNCAATamChn713SKawbvb6ccQntP9dLpRl5GLBEbBoyL+ZWV0ns+bG7' +
+    '1QRzAmzmlNgd08gI3YJ+HrPL+/H9KinifxD9o4IB2DCCAdQwDAYDVR0TAQH/BAIwADAfBgNVHSMEGDAW' +
+    'gBTZF/5LZ5A4S5L0287VV4AUC489yTBDBggrBgEFBQcBAQQ3MDUwMwYIKwYBBQUHMAGGJ2h0dHA6Ly9v' +
+    'Y3NwLmFwcGxlLmNvbS9vY3NwMDMtYWFpY2E1ZzEwMTCCARwGA1UdIASCARMwggEPMIIBCwYJKoZIhvdj' +
+    'ZAUBMIH9MIHDBggrBgEFBQcCAjCBtgyBs1JlbGlhbmNlIG9uIHRoaXMgY2VydGlmaWNhdGUgYnkgYW55' +
+    'IHBhcnR5IGFzc3VtZXMgYWNjZXB0YW5jZSBvZiB0aGUgdGhlbiBhcHBsaWNhYmxlIHN0YW5kYXJkIHRl' +
+    'cm1zIGFuZCBjb25kaXRpb25zIG9mIHVzZSwgY2VydGlmaWNhdGUgcG9saWN5IGFuZCBjZXJ0aWZpY2F0' +
+    'aW9uIHByYWN0aWNlIHN0YXRlbWVudHMuMDUGCCsGAQUFBwIBFilodHRwOi8vd3d3LmFwcGxlLmNvbS9j' +
+    'ZXJ0aWZpY2F0ZWF1dGhvcml0eTAdBgNVHQ4EFgQUTPGnnxBhiho5ZMxt5ts7B2KXdr0wDgYDVR0PAQH/' +
+    'BAQDAgeAMA8GCSqGSIb3Y2QMDwQCBQAwCgYIKoZIzj0EAwIDRwAwRAIgettk4nWcTwUW/yxJ2/OQLC8R' +
+    'LKZ3jlCCCnSDnKw7m+wCIEU1x2AqMkBN+SqBZ/yXtnLgCZnUKYqW5wXL7QlwF1CNMIIC+TCCAn+gAwIB' +
+    'AgIQVvuD1Cv/jcM3mSO1Wq5uvTAKBggqhkjOPQQDAzBnMRswGQYDVQQDDBJBcHBsZSBSb290IENBIC0g' +
+    'RzMxJjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApBcHBsZSBJ' +
+    'bmMuMQswCQYDVQQGEwJVUzAeFw0xOTAzMjIxNzUzMzNaFw0zNDAzMjIwMDAwMDBaMHwxMDAuBgNVBAMM' +
+    'J0FwcGxlIEFwcGxpY2F0aW9uIEludGVncmF0aW9uIENBIDUgLSBHMTEmMCQGA1UECwwdQXBwbGUgQ2Vy' +
+    'dGlmaWNhdGlvbiBBdXRob3JpdHkxEzARBgNVBAoMCkFwcGxlIEluYy4xCzAJBgNVBAYTAlVTMFkwEwYH' +
+    'KoZIzj0CAQYIKoZIzj0DAQcDQgAEks5jvX2GsasoCjsc4a/7BJSAkaz2Md+myyg1b0RL4SHlV90SjY26' +
+    'gnyVvkn6vjPKrs0EGfEvQyX69L6zy4N+uqOB9zCB9DAPBgNVHRMBAf8EBTADAQH/MB8GA1UdIwQYMBaA' +
+    'FLuw3qFYM4iapIqZ3r6966/ayySrMEYGCCsGAQUFBwEBBDowODA2BggrBgEFBQcwAYYqaHR0cDovL29j' +
+    'c3AuYXBwbGUuY29tL29jc3AwMy1hcHBsZXJvb3RjYWczMDcGA1UdHwQwMC4wLKAqoCiGJmh0dHA6Ly9j' +
+    'cmwuYXBwbGUuY29tL2FwcGxlcm9vdGNhZzMuY3JsMB0GA1UdDgQWBBTZF/5LZ5A4S5L0287VV4AUC489' +
+    'yTAOBgNVHQ8BAf8EBAMCAQYwEAYKKoZIhvdjZAYCAwQCBQAwCgYIKoZIzj0EAwMDaAAwZQIxAI1vpp+h' +
+    '4OTsW05zipJ/PXhTmI/02h9YHsN1Sv44qEwqgxoaqg2mZG3huZPo0VVM7QIwZzsstOHoNwd3y9Xsdqga' +
+    'OlU7PzVqyMXmkrDhYb6ASWnkXyupbOERAqrMYdk4t3NKMIICQzCCAcmgAwIBAgIILcX8iNLFS5UwCgYI' +
+    'KoZIzj0EAwMwZzEbMBkGA1UEAwwSQXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0' +
+    'aWZpY2F0aW9uIEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcNMTQw' +
+    'NDMwMTgxOTA2WhcNMzkwNDMwMTgxOTA2WjBnMRswGQYDVQQDDBJBcHBsZSBSb290IENBIC0gRzMxJjAk' +
+    'BgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQsw' +
+    'CQYDVQQGEwJVUzB2MBAGByqGSM49AgEGBSuBBAAiA2IABJjpLz1AcqTtkyJygRMc3RCV8cWjTnHcFBbZ' +
+    'DuWmBSp3ZHtfTjjTuxxEtX/1H7YyYl3J6YRbTzBPEVoA/VhYDKX1DyxNB0cTddqXl5dvMVztK517IDvY' +
+    'uVTZXpmkOlEKMaNCMEAwHQYDVR0OBBYEFLuw3qFYM4iapIqZ3r6966/ayySrMA8GA1UdEwEB/wQFMAMB' +
+    'Af8wDgYDVR0PAQH/BAQDAgEGMAoGCCqGSM49BAMDA2gAMGUCMQCD6cHEFl4aXTQY2e3v9GwOAEZLuN+y' +
+    'RhHFD/3meoyhpmvOwgPUnPWTxnS4at+qIxUCMG1mihDK1A3UT82NQz60imOlM27jbdoXt2QfyFMm+Yhi' +
+    'dDkLF1vLUagM6BgD56KyKAAAMYH8MIH5AgEBMIGQMHwxMDAuBgNVBAMMJ0FwcGxlIEFwcGxpY2F0aW9u' +
+    'IEludGVncmF0aW9uIENBIDUgLSBHMTEmMCQGA1UECwwdQXBwbGUgQ2VydGlmaWNhdGlvbiBBdXRob3Jp' +
+    'dHkxEzARBgNVBAoMCkFwcGxlIEluYy4xCzAJBgNVBAYTAlVTAhB9zZlRLYx9zRYL3g44gXpCMA0GCWCG' +
+    'SAFlAwQCAQUAMAoGCCqGSM49BAMCBEYwRAIgINEHAvoReexoDLNGVQCmtWkJURA9uYSpLlKc4fQwpSkC' +
+    'IGk/ClCa0cKNkNsn7AedD0o1aKa0qyImCf66fjy1WUVKAAAAAAAA'
+  const expectedPublicKey = 'MFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE1G0THfbEzUwh6flb4T6ziElgQausb3s9HtlkzaBR3dYj' +
+    '3OwQNEEUegbnTrNsCbF3bS8fFxuwpjhdf0cQObSv7w=='
+
+  const attestation = decodeBase64(
+    'o2NmbXRvYXBwbGUtYXBwYXR0ZXN0Z2F0dFN0bXSiY3g1Y4JZAzgwggM0MIICuqADAgECAgYBjXXNnisw' +
+      'CgYIKoZIzj0EAwIwTzEjMCEGA1UEAwwaQXBwbGUgQXBwIEF0dGVzdGF0aW9uIENBIDExEzARBgNVBAoM' +
+      'CkFwcGxlIEluYy4xEzARBgNVBAgMCkNhbGlmb3JuaWEwHhcNMjQwMjAzMjAyNzA2WhcNMjUwMTA4MDYy' +
+      'MTA2WjCBkTFJMEcGA1UEAwxAYjNmZDc3ZTBjNmRlMTA0NjQzNjRhMGFmMzkzN2ZlOGQ5ODBkODY5YTAz' +
+      'YzFkNWQ5ZjFjMjlmNGYyOWJjMTU0ODEaMBgGA1UECwwRQUFBIENlcnRpZmljYXRpb24xEzARBgNVBAoM' +
+      'CkFwcGxlIEluYy4xEzARBgNVBAgMCkNhbGlmb3JuaWEwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATU' +
+      'bRMd9sTNTCHp+VvhPrOISWBBq6xvez0e2WTNoFHd1iPc7BA0QRR6BudOs2wJsXdtLx8XG7CmOF1/RxA5' +
+      'tK/vo4IBPTCCATkwDAYDVR0TAQH/BAIwADAOBgNVHQ8BAf8EBAMCBPAwgYoGCSqGSIb3Y2QIBQR9MHuk' +
+      'AwIBCr+JMAMCAQG/iTEDAgEAv4kyAwIBAb+JMwMCAQG/iTQrBClWOEg2TFE5NDQ4LmlvLnVlYmVsYWNr' +
+      'ZXIuQXBwQXR0ZXN0RXhhbXBsZaUGBARza3Mgv4k2AwIBBb+JNwMCAQC/iTkDAgEAv4k6AwIBAL+JOwMC' +
+      'AQAwVwYJKoZIhvdjZAgHBEowSL+KeAgEBjE3LjIuMb+IUAcCBQD/////v4p7BwQFMjFDNja/in0IBAYx' +
+      'Ny4yLjG/in4DAgEAv4sMDwQNMjEuMy42Ni4wLjAsMDAzBgkqhkiG92NkCAIEJjAkoSIEIM5NSa3vXruG' +
+      'r5szchuQ4E6N36Nm/mZlkJflZq9Sdm4ZMAoGCCqGSM49BAMCA2gAMGUCMHlYC0KJPqTmF+QSnMlf3MH2' +
+      'XPSrSRnjyNI5yaSGNqeIkHlLJJQj3IUnMKA8JsCXsAIxAIo0HeGatVEyQhqrS9Ug9/3HbMXTGXqxRcdn' +
+      'T3XrA/atw4UYzwsK/vEEbRItNrbsKFkCRzCCAkMwggHIoAMCAQICEAm6xeG8QBrZ1FOVvDgaCFQwCgYI' +
+      'KoZIzj0EAwMwUjEmMCQGA1UEAwwdQXBwbGUgQXBwIEF0dGVzdGF0aW9uIFJvb3QgQ0ExEzARBgNVBAoM' +
+      'CkFwcGxlIEluYy4xEzARBgNVBAgMCkNhbGlmb3JuaWEwHhcNMjAwMzE4MTgzOTU1WhcNMzAwMzEzMDAw' +
+      'MDAwWjBPMSMwIQYDVQQDDBpBcHBsZSBBcHAgQXR0ZXN0YXRpb24gQ0EgMTETMBEGA1UECgwKQXBwbGUg' +
+      'SW5jLjETMBEGA1UECAwKQ2FsaWZvcm5pYTB2MBAGByqGSM49AgEGBSuBBAAiA2IABK5bN6B3TXmyNY9A' +
+      '59HyJibxwl/vF4At6rOCalmHT/jSrRUleJqiZgQZEki2PLlnBp6Y02O9XjcPv6COMp6Ac6mF53Ruo1mi' +
+      '9m8p2zKvRV4hFljVZ6+eJn6yYU3CGmbOmaNmMGQwEgYDVR0TAQH/BAgwBgEB/wIBADAfBgNVHSMEGDAW' +
+      'gBSskRBTM72+aEH/pwyp5frq5eWKoTAdBgNVHQ4EFgQUPuNdHAQZqcm0MfiEdNbh4Vdy45swDgYDVR0P' +
+      'AQH/BAQDAgEGMAoGCCqGSM49BAMDA2kAMGYCMQC7voiNc40FAs+8/WZtCVdQNbzWhyw/hDBJJint0fkU' +
+      '6HmZHJrota7406hUM/e2DQYCMQCrOO3QzIHtAKRSw7pE+ZNjZVP+zCl/LrTfn16+WkrKtplcS4IN+QQ4' +
+      'b3gHu1iUObdncmVjZWlwdFkOrzCABgkqhkiG9w0BBwKggDCAAgEBMQ8wDQYJYIZIAWUDBAIBBQAwgAYJ' +
+      'KoZIhvcNAQcBoIAkgASCA+gxggRqMDECAQICAQEEKVY4SDZMUTk0NDguaW8udWViZWxhY2tlci5BcHBB' +
+      'dHRlc3RFeGFtcGxlMIIDQgIBAwIBAQSCAzgwggM0MIICuqADAgECAgYBjXXNniswCgYIKoZIzj0EAwIw' +
+      'TzEjMCEGA1UEAwwaQXBwbGUgQXBwIEF0dGVzdGF0aW9uIENBIDExEzARBgNVBAoMCkFwcGxlIEluYy4x' +
+      'EzARBgNVBAgMCkNhbGlmb3JuaWEwHhcNMjQwMjAzMjAyNzA2WhcNMjUwMTA4MDYyMTA2WjCBkTFJMEcG' +
+      'A1UEAwxAYjNmZDc3ZTBjNmRlMTA0NjQzNjRhMGFmMzkzN2ZlOGQ5ODBkODY5YTAzYzFkNWQ5ZjFjMjlm' +
+      'NGYyOWJjMTU0ODEaMBgGA1UECwwRQUFBIENlcnRpZmljYXRpb24xEzARBgNVBAoMCkFwcGxlIEluYy4x' +
+      'EzARBgNVBAgMCkNhbGlmb3JuaWEwWTATBgcqhkjOPQIBBggqhkjOPQMBBwNCAATUbRMd9sTNTCHp+Vvh' +
+      'PrOISWBBq6xvez0e2WTNoFHd1iPc7BA0QRR6BudOs2wJsXdtLx8XG7CmOF1/RxA5tK/vo4IBPTCCATkw' +
+      'DAYDVR0TAQH/BAIwADAOBgNVHQ8BAf8EBAMCBPAwgYoGCSqGSIb3Y2QIBQR9MHukAwIBCr+JMAMCAQG/' +
+      'iTEDAgEAv4kyAwIBAb+JMwMCAQG/iTQrBClWOEg2TFE5NDQ4LmlvLnVlYmVsYWNrZXIuQXBwQXR0ZXN0' +
+      'RXhhbXBsZaUGBARza3Mgv4k2AwIBBb+JNwMCAQC/iTkDAgEAv4k6AwIBAL+JOwMCAQAwVwYJKoZIhvdj' +
+      'ZAgHBEowSL+KeAgEBjE3LjIuMb+IUAcCBQD/////v4p7BwQFMjFDNja/in0IBAYxNy4yLjG/in4DAgEA' +
+      'v4sMDwQNMjEuMy42Ni4wLjAsMDAzBgkqhkiG92NkCAIEJjAkoSIEIM5NSa3vXruGr5szchuQ4E6N36Nm' +
+      '/mZlkJflZq9Sdm4ZMAoGCCqGSM49BAMCA2gAMGUCMHlYC0KJPqTmF+QSnMlf3MH2XPSrSRnjyNI5yaSG' +
+      'NqeIkHlLJJQj3IUnMKA8JsCXsAIxAIo0HeGatVEyQhqrS9Ug9/3HbMXTGXqxRcdnT3XrA/atw4UYzwsK' +
+      '/vEEbRItNrbsKDAoAgEEAgEBBCCU3wfNkLCWvlrQ0iwz2h6NdnA1ymMXJeLGeG8gFJmUITBgAgEFAgEB' +
+      'BFgxZmt5Q2hVMUIwNWkwNW5Rem85MlErajZWbDR6U3duNytVb0h6bVd0ckJuN1lyaDBNNTFveFF3BIGG' +
+      'bXpJV2tTUFhqK1RJOC9jNFRHOHdCTmhkV1ZJZ0VsUT09MA4CAQYCAQEEBkFUVEVTVDAPAgEHAgEBBAdz' +
+      'YW5kYm94MCACAQwCAQEEGDIwMjQtMDItMDRUMjA6Mjc6MDYuMTkzWjAgAgEVAgEBBBgyMDI0LTA1LTA0' +
+      'VDIwOjI3OjA2LjE5M1oAAAAAAACggDCCA60wggNUoAMCAQICEH3NmVEtjH3NFgveDjiBekIwCgYIKoZI' +
+      'zj0EAwIwfDEwMC4GA1UEAwwnQXBwbGUgQXBwbGljYXRpb24gSW50ZWdyYXRpb24gQ0EgNSAtIEcxMSYw' +
+      'JAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTETMBEGA1UECgwKQXBwbGUgSW5jLjEL' +
+      'MAkGA1UEBhMCVVMwHhcNMjMwMzA4MTUyOTE3WhcNMjQwNDA2MTUyOTE2WjBaMTYwNAYDVQQDDC1BcHBs' +
+      'aWNhdGlvbiBBdHRlc3RhdGlvbiBGcmF1ZCBSZWNlaXB0IFNpZ25pbmcxEzARBgNVBAoMCkFwcGxlIElu' +
+      'Yy4xCzAJBgNVBAYTAlVTMFkwEwYHKoZIzj0CAQYIKoZIzj0DAQcDQgAE2pgoZ+9d0imsG72+nHEJ7T/X' +
+      'S6UZeRiwRGwaMi/mVldJ7Pmxu9UEcwJs5pTYHdPICN2Cfh6zy/vx/Sop4n8Q/aOCAdgwggHUMAwGA1Ud' +
+      'EwEB/wQCMAAwHwYDVR0jBBgwFoAU2Rf+S2eQOEuS9NvO1VeAFAuPPckwQwYIKwYBBQUHAQEENzA1MDMG' +
+      'CCsGAQUFBzABhidodHRwOi8vb2NzcC5hcHBsZS5jb20vb2NzcDAzLWFhaWNhNWcxMDEwggEcBgNVHSAE' +
+      'ggETMIIBDzCCAQsGCSqGSIb3Y2QFATCB/TCBwwYIKwYBBQUHAgIwgbYMgbNSZWxpYW5jZSBvbiB0aGlz' +
+      'IGNlcnRpZmljYXRlIGJ5IGFueSBwYXJ0eSBhc3N1bWVzIGFjY2VwdGFuY2Ugb2YgdGhlIHRoZW4gYXBw' +
+      'bGljYWJsZSBzdGFuZGFyZCB0ZXJtcyBhbmQgY29uZGl0aW9ucyBvZiB1c2UsIGNlcnRpZmljYXRlIHBv' +
+      'bGljeSBhbmQgY2VydGlmaWNhdGlvbiBwcmFjdGljZSBzdGF0ZW1lbnRzLjA1BggrBgEFBQcCARYpaHR0' +
+      'cDovL3d3dy5hcHBsZS5jb20vY2VydGlmaWNhdGVhdXRob3JpdHkwHQYDVR0OBBYEFEzxp58QYYoaOWTM' +
+      'bebbOwdil3a9MA4GA1UdDwEB/wQEAwIHgDAPBgkqhkiG92NkDA8EAgUAMAoGCCqGSM49BAMCA0cAMEQC' +
+      'IHrbZOJ1nE8FFv8sSdvzkCwvESymd45Qggp0g5ysO5vsAiBFNcdgKjJATfkqgWf8l7Zy4AmZ1CmKlucF' +
+      'y+0JcBdQjTCCAvkwggJ/oAMCAQICEFb7g9Qr/43DN5kjtVqubr0wCgYIKoZIzj0EAwMwZzEbMBkGA1UE' +
+      'AwwSQXBwbGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0' +
+      'eTETMBEGA1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwHhcNMTkwMzIyMTc1MzMzWhcNMzQwMzIy' +
+      'MDAwMDAwWjB8MTAwLgYDVQQDDCdBcHBsZSBBcHBsaWNhdGlvbiBJbnRlZ3JhdGlvbiBDQSA1IC0gRzEx' +
+      'JjAkBgNVBAsMHUFwcGxlIENlcnRpZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApBcHBsZSBJbmMu' +
+      'MQswCQYDVQQGEwJVUzBZMBMGByqGSM49AgEGCCqGSM49AwEHA0IABJLOY719hrGrKAo7HOGv+wSUgJGs' +
+      '9jHfpssoNW9ES+Eh5VfdEo2NuoJ8lb5J+r4zyq7NBBnxL0Ml+vS+s8uDfrqjgfcwgfQwDwYDVR0TAQH/' +
+      'BAUwAwEB/zAfBgNVHSMEGDAWgBS7sN6hWDOImqSKmd6+veuv2sskqzBGBggrBgEFBQcBAQQ6MDgwNgYI' +
+      'KwYBBQUHMAGGKmh0dHA6Ly9vY3NwLmFwcGxlLmNvbS9vY3NwMDMtYXBwbGVyb290Y2FnMzA3BgNVHR8E' +
+      'MDAuMCygKqAohiZodHRwOi8vY3JsLmFwcGxlLmNvbS9hcHBsZXJvb3RjYWczLmNybDAdBgNVHQ4EFgQU' +
+      '2Rf+S2eQOEuS9NvO1VeAFAuPPckwDgYDVR0PAQH/BAQDAgEGMBAGCiqGSIb3Y2QGAgMEAgUAMAoGCCqG' +
+      'SM49BAMDA2gAMGUCMQCNb6afoeDk7FtOc4qSfz14U5iP9NofWB7DdUr+OKhMKoMaGqoNpmRt4bmT6NFV' +
+      'TO0CMGc7LLTh6DcHd8vV7HaoGjpVOz81asjF5pKw4WG+gElp5F8rqWzhEQKqzGHZOLdzSjCCAkMwggHJ' +
+      'oAMCAQICCC3F/IjSxUuVMAoGCCqGSM49BAMDMGcxGzAZBgNVBAMMEkFwcGxlIFJvb3QgQ0EgLSBHMzEm' +
+      'MCQGA1UECwwdQXBwbGUgQ2VydGlmaWNhdGlvbiBBdXRob3JpdHkxEzARBgNVBAoMCkFwcGxlIEluYy4x' +
+      'CzAJBgNVBAYTAlVTMB4XDTE0MDQzMDE4MTkwNloXDTM5MDQzMDE4MTkwNlowZzEbMBkGA1UEAwwSQXBw' +
+      'bGUgUm9vdCBDQSAtIEczMSYwJAYDVQQLDB1BcHBsZSBDZXJ0aWZpY2F0aW9uIEF1dGhvcml0eTETMBEG' +
+      'A1UECgwKQXBwbGUgSW5jLjELMAkGA1UEBhMCVVMwdjAQBgcqhkjOPQIBBgUrgQQAIgNiAASY6S89QHKk' +
+      '7ZMicoETHN0QlfHFo05x3BQW2Q7lpgUqd2R7X04407scRLV/9R+2MmJdyemEW08wTxFaAP1YWAyl9Q8s' +
+      'TQdHE3Xal5eXbzFc7SudeyA72LlU2V6ZpDpRCjGjQjBAMB0GA1UdDgQWBBS7sN6hWDOImqSKmd6+veuv' +
+      '2sskqzAPBgNVHRMBAf8EBTADAQH/MA4GA1UdDwEB/wQEAwIBBjAKBggqhkjOPQQDAwNoADBlAjEAg+nB' +
+      'xBZeGl00GNnt7/RsDgBGS7jfskYRxQ/95nqMoaZrzsID1Jz1k8Z0uGrfqiMVAjBtZooQytQN1E/NjUM+' +
+      'tIpjpTNu423aF7dkH8hTJvmIYnQ5Cxdby1GoDOgYA+eisigAADGB/DCB+QIBATCBkDB8MTAwLgYDVQQD' +
+      'DCdBcHBsZSBBcHBsaWNhdGlvbiBJbnRlZ3JhdGlvbiBDQSA1IC0gRzExJjAkBgNVBAsMHUFwcGxlIENl' +
+      'cnRpZmljYXRpb24gQXV0aG9yaXR5MRMwEQYDVQQKDApBcHBsZSBJbmMuMQswCQYDVQQGEwJVUwIQfc2Z' +
+      'US2Mfc0WC94OOIF6QjANBglghkgBZQMEAgEFADAKBggqhkjOPQQDAgRGMEQCICDRBwL6EXnsaAyzRlUA' +
+      'prVpCVEQPbmEqS5SnOH0MKUpAiBpPwpQmtHCjZDbJ+wHnQ9KNWimtKsiJgn+un48tVlFSgAAAAAAAGhh' +
+      'dXRoRGF0YVikyj3cO094ro3BWWx1ax19Jg0jKzZrOT8xG6xW0D0QOqxAAAAAAGFwcGF0dGVzdGRldmVs' +
+      'b3AAILP9d+DG3hBGQ2Sgrzk3/o2YDYaaA8HV2fHCn08pvBVIpQECAyYgASFYINRtEx32xM1MIen5W+E+' +
+      's4hJYEGrrG97PR7ZZM2gUd3WIlggI9zsEDRBFHoG506zbAmxd20vHxcbsKY4XX9HEDm0r+8=',
+  )
+  const challenge = decodeBase64('NmY0NmFhZWItMzk4OS00NWRiLThjMjQtNmNjODhhNzZlNzg5')
+  const keyId = decodeBase64('s/134MbeEEZDZKCvOTf+jZgNhpoDwdXZ8cKfTym8FUg=')
+  const BUNDLE_IDENTIFIER = 'io.uebelacker.AppAttestExample'
+  const TEAM_IDENTIFIER = 'V8H6LQ9448'
+  const appId = `${TEAM_IDENTIFIER}.${BUNDLE_IDENTIFIER}`
+
+  const now = Effect.sync(() => new Date('2024-04-18'))
+  const verifyAttestationWithFixedDate = verifyAttestation({ now, appIds: [appId] })
+
+  it.effect('Should_WorkWithExample_When_Apple', () =>
+    Effect.gen(function*() {
+      const attestationResult = yield* verifyAttestationWithFixedDate({ challenge, keyId, attestation })
+
+      expect(encodeBase64(attestationResult.publicKey)).toEqual(expectedPublicKey)
+      expect(encodeBase64(attestationResult.receipt)).toEqual(expectedReciept)
+    }))
+
+  it.effect('Should_FailWithVerifyAttestationError_When_CredentialCertificateDateIsExpired', () =>
+    Effect.gen(function*() {
+      const expiredDateVerifier = verifyAttestation({
+        // Intentionally chosen to be AFTER credential cert validity in this fixture.
+        // This targets the `if (!credCertVerified)` branch so mutation tests can
+        // distinguish that guard from later failures in the verification pipeline.
+        now: Effect.sync(() => new Date('2026-01-01')),
+        appIds: [appId],
+      })
+
+      const result = yield* Effect.either(
+        expiredDateVerifier({
+          challenge,
+          keyId,
+          attestation,
+        }),
+      )
+
+      expect(result).toEqual(Either.left(expect.objectContaining({})))
+    }))
+
+  it.effect('Should_FailWithVerifyAttestationError_When_AttestationCborIsMalformed', () =>
+    Effect.gen(function*() {
+      const result = yield* Effect.either(
+        verifyAttestationWithFixedDate({
+          challenge,
+          keyId,
+          attestation: new Uint8Array([0x58, 0x01]),
+        }),
+      )
+
+      expect(result).toEqual(Either.left(expect.objectContaining({})))
+    }))
+
+  it.effect('Should_FailWithVerifyAttestationError_When_AttestationSchemaIsInvalid', () =>
+    Effect.gen(function*() {
+      const result = yield* Effect.either(
+        verifyAttestationWithFixedDate({
+          challenge,
+          keyId,
+          attestation: new Uint8Array([0x01]),
+        }),
+      )
+
+      expect(result).toEqual(Either.left(expect.objectContaining({})))
+    }))
+})

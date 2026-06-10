@@ -1,0 +1,41 @@
+name: Setup pnpm store
+description: |
+  Restore the pnpm-store cache at pnpm's default location
+  (`~/.local/share/pnpm/store`) and export `PNPM_STORE_PATH` for downstream
+  build-contexts. Read-only — save lives in `install-deps` so the save
+  runs after `pnpm install` has populated the store.
+
+  Cache key prefix is versioned (`pnpm-v2-`) so a one-shot bump can evict
+  every prior save. Restore-keys are CONSTRAINED to the current lockfile
+  hash (trailing dash); we never fall back to a foreign-lockfile store —
+  doing so corrupts `pnpm install` inside Docker when patched-dependency
+  metadata diverges (`Cannot use 'in' operator to search for 'directory'
+  in undefined` from `lockfileToDepGraph`).
+
+  Exports `PNPM_STORE_RESTORED=true` when any same-lockfile save matched
+  (exact or prefix), so `install-deps` can skip a redundant save.
+
+runs:
+  using: composite
+  steps:
+    - name: Restore pnpm store
+      id: restore
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.local/share/pnpm/store
+        key: ${{ runner.os }}-pnpm-v2-${{ hashFiles('pnpm-lock.yaml') }}
+        restore-keys: |
+          ${{ runner.os }}-pnpm-v2-${{ hashFiles('pnpm-lock.yaml') }}-
+
+    - name: Export PNPM_STORE_PATH
+      shell: bash
+      env:
+        MATCHED_KEY: ${{ steps.restore.outputs.cache-matched-key }}
+      run: |
+        mkdir -p "$HOME/.local/share/pnpm/store"
+        echo "PNPM_STORE_PATH=$HOME/.local/share/pnpm/store" >> "$GITHUB_ENV"
+        if [ -n "$MATCHED_KEY" ]; then
+          echo "PNPM_STORE_RESTORED=true" >> "$GITHUB_ENV"
+        else
+          echo "PNPM_STORE_RESTORED=false" >> "$GITHUB_ENV"
+        fi

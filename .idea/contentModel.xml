@@ -1,0 +1,15 @@
+<?xml version="1.0" encoding="UTF-8"?>
+<project version="4">
+  <component name="UserContentModel">
+    <attachedFolders />
+    <explicitIncludes />
+    <explicitExcludes>
+      <Path>repos</Path>
+      <Path>node_modules</Path>
+      <Path>dist</Path>
+      <Path>.turbo</Path>
+      <Path>out</Path>
+      <Path>coverage</Path>
+    </explicitExcludes>
+  </component>
+</project>

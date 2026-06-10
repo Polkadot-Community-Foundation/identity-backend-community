@@ -1,0 +1,30 @@
+{
+  "extends": "@total-typescript/tsconfig/bundler/dom/app",
+  "compilerOptions": {
+    "target": "es2024",
+    "allowJs": true,
+    "noEmit": true,
+    "exactOptionalPropertyTypes": true,
+    "incremental": true,
+    "paths": {
+      "#root/*": ["./src/*"]
+    },
+    "plugins": [
+      {
+        "name": "@effect/language-service"
+      }
+    ],
+    "customConditions": ["@identity-backend/source"],
+    "lib": [
+      "ESNext",
+      "dom",
+      "dom.iterable"
+    ]
+  },
+  "include": ["lib/**/*.js", "src", "tests", "scripts"],
+  "references": [
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

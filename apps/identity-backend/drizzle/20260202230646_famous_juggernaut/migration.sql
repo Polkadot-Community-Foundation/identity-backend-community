@@ -1,0 +1,1 @@
+ALTER TABLE "polkadot_app"."individuality_usernames" ALTER COLUMN "digits" SET DATA TYPE varchar(10);

@@ -1,0 +1,62 @@
+{
+  "name": "@identity-backend/mobile-push-notifications",
+  "private": true,
+  "license": "GPL-3.0-only",
+  "version": "0.0.1",
+  "author": "Ryan Lee <ryan@parity.io>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/mod.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./apn": {
+      "@identity-backend/source": "./src/apn/mod.ts",
+      "default": "./dist/apn.mjs"
+    },
+    "./platform": {
+      "@identity-backend/source": "./src/platform.ts",
+      "default": "./dist/platform.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "test": "vitest run",
+    "test:run": "pnpm test",
+    "test:coverage": "pnpm test --coverage",
+    "mutation": "backend run --cmd 'stryker run --incremental' --stryker",
+    "mutation:full": "backend run --guard --cmd 'stryker run'",
+    "typecheck": "tsgo --noEmit --incremental",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/testing": "workspace:^",
+    "@identity-backend/vitest-config": "workspace:^",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "tsdown": "catalog:",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./apn": "./dist/apn.mjs",
+      "./platform": "./dist/platform.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

@@ -1,0 +1,28 @@
+name: Authenticate to Google Artifact Registry
+description: Install gcloud, authenticate via workload identity, and configure docker for GAR
+
+inputs:
+  service-account:
+    description: GCP service account
+    required: true
+  workload-identity-provider:
+    description: GCP workload identity provider
+    required: true
+  gar-host:
+    description: Artifact Registry host
+    required: false
+    default: us-docker.pkg.dev
+
+runs:
+  using: composite
+  steps:
+    - uses: google-github-actions/setup-gcloud@v3
+
+    - uses: google-github-actions/auth@v3
+      with:
+        service_account: ${{ inputs.service-account }}
+        workload_identity_provider: ${{ inputs.workload-identity-provider }}
+
+    - name: Configure Docker for Artifact Registry
+      shell: bash
+      run: gcloud auth configure-docker ${{ inputs.gar-host }}

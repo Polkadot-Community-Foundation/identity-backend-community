@@ -1,0 +1,47 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 98de2c26f802540674161d83144af4cc5eeeccf3..ebfaf4ca6e609b1443ad3adc844d6a16380faad2 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1,3 +1,8 @@
++/**
++ * @module This file has been patched to allow the expanded private key to be
++ * derived in apps/identity-backend/scripts/private-key.ts
++ */
++
+ "use strict";
+ var __defProp = Object.defineProperty;
+ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 555207db8c168105398a9644609c4949ef617dd6..b2fb7938727b3c89517b129d75bdd6d8b1d4fcff 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -1,13 +1,14 @@
+ import * as _polkadot_labs_hdkd_helpers from '@polkadot-labs/hdkd-helpers';
+-import { Hex, KeyPair } from '@polkadot-labs/hdkd-helpers';
++import { Hex, KeyPair, KeyPairExtended } from '@polkadot-labs/hdkd-helpers';
+ 
+ type CreateDeriveFn = (seed: Hex) => (path: string) => KeyPair;
++type CreateDeriveFnExtended = (seed: Hex) => (path: string) => KeyPairExtended;
+ 
+ declare const ecdsaCreateDerive: CreateDeriveFn;
+ 
+ declare const ed25519CreateDerive: CreateDeriveFn;
+ 
+-declare const sr25519CreateDerive: CreateDeriveFn;
++declare const sr25519CreateDerive: CreateDeriveFnExtended;
+ 
+ declare const withNetworkAccount: (keyPair: KeyPair, prefix?: number) => {
+     accountId: Uint8Array;
+diff --git a/dist/index.js b/dist/index.js
+index f909900e3b0ebb70892000b3cc25cc5e3f598304..6c02cb1aea6f1a550d641e4d4c39d65e057e10ad 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,3 +1,8 @@
++/**
++ * @module This file has been patched to allow the expanded private key to be
++ * derived in apps/identity-backend/scripts/private-key.ts
++ */
++
+ // src/ecdsaCreateDerive.ts
+ import { createDerive, ecdsa, ecdsaDerive } from "@polkadot-labs/hdkd-helpers";
+ var ecdsaCreateDerive = (seed) => createDerive({

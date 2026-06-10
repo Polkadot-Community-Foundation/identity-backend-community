@@ -1,0 +1,98 @@
+diff --git a/dist/index.cjs b/dist/index.cjs
+index 866bfe13a3d3565ad4c00c35e9530a98f7af8b55..28983bc5d8d46bb992240d3acd355003f7b07722 100644
+--- a/dist/index.cjs
++++ b/dist/index.cjs
+@@ -1,3 +1,8 @@
++/**
++ * @module This file has been patched to allow the expanded private key to be
++ * derived in apps/identity-backend/scripts/private-key.ts
++ */
++
+ "use strict";
+ var __defProp = Object.defineProperty;
+ var __getOwnPropDesc = Object.getOwnPropertyDescriptor;
+@@ -299,6 +304,7 @@ var sr25519Derive = (seed, curve, derivations) => {
+   }, keypair);
+   const privateKey = derivedKeypair.slice(0, 64);
+   return {
++    privateKey,
+     publicKey: derivedKeypair.slice(64),
+     sign(message) {
+       return curve.sign(message, privateKey);
+@@ -315,7 +321,8 @@ var createChainCode = (code) => {
+ };
+ 
+ // src/parseDerivations.ts
+-var DERIVATION_RE = /(\/{1,2})(\w+)/g;
++// https://github.com/polkadot-labs/hdkd/issues/508
++var DERIVATION_RE = /(\/{1,2})([\w-]+)/g;
+ var parseDerivations = (derivationsStr) => {
+   const derivations = [];
+   for (const [_, type, code] of derivationsStr.matchAll(DERIVATION_RE)) {
+diff --git a/dist/index.d.ts b/dist/index.d.ts
+index 31f6942a3f1f7215190badb5a629333769eb80d7..8d1f8d837bb1c27229b438ec35d64431a02c5348 100644
+--- a/dist/index.d.ts
++++ b/dist/index.d.ts
+@@ -8,12 +8,16 @@ type KeyPair = {
+     publicKey: Uint8Array;
+     sign: (message: Hex) => Uint8Array;
+ };
++type KeyPairExtended = KeyPair & {
++    privateKey: Uint8Array
++}
+ type DeriveFn = (path: string) => KeyPair;
+ 
+ declare const DEV_PHRASE = "bottom drive obey lake curtain smoke basket hold race lonely fit walk";
+ declare const DEV_MINI_SECRET = "fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e";
+ 
+ type DeriveKeyPairFn = (seed: Uint8Array, curve: Curve, derivations: [type: "hard" | "soft", chainCodes: Uint8Array][]) => KeyPair;
++type DeriveKeyPairFnExtended = (seed: Uint8Array, curve: Curve, derivations: [type: "hard" | "soft", chainCodes: Uint8Array][]) => KeyPairExtended;
+ 
+ declare const blake2b256: (msg: Hex) => Uint8Array;
+ declare const blake2b512: (msg: Hex) => Uint8Array;
+@@ -57,7 +61,7 @@ declare const ecdsaDerive: DeriveKeyPairFn;
+ 
+ declare const ed25519Derive: DeriveKeyPairFn;
+ 
+-declare const sr25519Derive: DeriveKeyPairFn;
++declare const sr25519Derive: DeriveKeyPairFnExtended;
+ 
+ type CreateDeriveOptions = {
+     seed: Hex;
+@@ -66,4 +70,4 @@ type CreateDeriveOptions = {
+ };
+ declare const createDerive: ({ seed, curve, derive }: CreateDeriveOptions) => DeriveFn;
+ 
+-export { BIP39_EN_WORDLIST, type Curve, DEV_MINI_SECRET, DEV_PHRASE, type DeriveFn, type Hex, type KeyPair, accountId, blake2b256, blake2b512, createDerive, createDeriveKeyPairFn, ecdsa, ecdsaDerive, ed25519, ed25519Derive, ensureBytes, entropyToMiniSecret, entropyToMiniSecretAsync, entropyToMnemonic, generateMnemonic, mnemonicToEntropy, mnemonicToMiniSecret, mnemonicToMiniSecretAsync, parseSuri, sr25519, sr25519Derive, ss58Address, ss58Decode, ss58Encode, ss58PublicKey, validateMnemonic };
++export { BIP39_EN_WORDLIST, type Curve, DEV_MINI_SECRET, DEV_PHRASE, type DeriveFn, type Hex, type KeyPair, type KeyPairExtended, accountId, blake2b256, blake2b512, createDerive, createDeriveKeyPairFn, ecdsa, ecdsaDerive, ed25519, ed25519Derive, ensureBytes, entropyToMiniSecret, entropyToMiniSecretAsync, entropyToMnemonic, generateMnemonic, mnemonicToEntropy, mnemonicToMiniSecret, mnemonicToMiniSecretAsync, parseSuri, sr25519, sr25519Derive, ss58Address, ss58Decode, ss58Encode, ss58PublicKey, validateMnemonic };
+diff --git a/dist/index.js b/dist/index.js
+index 25e5bd7ed71ab6b61fffee3a513977852468674a..abca67c53fc0bcbdd079f10be7aaba83be97e9e7 100644
+--- a/dist/index.js
++++ b/dist/index.js
+@@ -1,3 +1,8 @@
++/**
++ * @module This file has been patched to allow the expanded private key to be
++ * derived in apps/identity-backend/scripts/private-key.ts
++ */
++
+ // src/constants.ts
+ var DEV_PHRASE = "bottom drive obey lake curtain smoke basket hold race lonely fit walk";
+ var DEV_MINI_SECRET = "fac7959dbfe72f052e5a0c3c8d6530f202b02fd8f9f5ca3580ec8deb7797479e";
+@@ -254,6 +259,7 @@ var sr25519Derive = (seed, curve, derivations) => {
+   }, keypair);
+   const privateKey = derivedKeypair.slice(0, 64);
+   return {
++    privateKey,
+     publicKey: derivedKeypair.slice(64),
+     sign(message) {
+       return curve.sign(message, privateKey);
+@@ -270,7 +276,8 @@ var createChainCode = (code) => {
+ };
+ 
+ // src/parseDerivations.ts
+-var DERIVATION_RE = /(\/{1,2})(\w+)/g;
++// https://github.com/polkadot-labs/hdkd/issues/508
++var DERIVATION_RE = /(\/{1,2})([\w-]+)/g;
+ var parseDerivations = (derivationsStr) => {
+   const derivations = [];
+   for (const [_, type, code] of derivationsStr.matchAll(DERIVATION_RE)) {

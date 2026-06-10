@@ -1,0 +1,31 @@
+{
+  "name": "@identity-backend/backend-cli",
+  "version": "0.1.0",
+  "type": "module",
+  "private": true,
+  "description": "Shared CLI for Identity Backend AI monorepo with test commands and AI/TTY blocking",
+  "bin": {
+    "backend": "./src/index.ts"
+  },
+  "files": [
+    "src",
+    "dist"
+  ],
+  "scripts": {
+    "dev": "bun run src/index.ts",
+    "typecheck": "tsgo --noEmit --incremental",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "@effect/cli": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@types/bun": "catalog:",
+    "@types/node": "catalog:",
+    "bun": "^1.3.13",
+    "typescript": "^6.0.3"
+  }
+}

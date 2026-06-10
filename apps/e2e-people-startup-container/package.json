@@ -1,0 +1,32 @@
+{
+  "name": "identity-backend-e2e-people-startup-container",
+  "private": true,
+  "version": "0.6.7",
+  "description": "",
+  "type": "module",
+  "scripts": {
+    "dev": "bun --watch ./src/main.ts",
+    "start": "bun run src/main.ts",
+    "typecheck": "tsgo --noEmit --incremental",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "keywords": [],
+  "dependencies": {
+    "@effect/cluster": "catalog:",
+    "@effect/platform": "catalog:",
+    "@effect/platform-bun": "catalog:",
+    "@effect/sql": "catalog:",
+    "@identity-backend/descriptors": "workspace:^",
+    "@polkadot-api/signer": "catalog:",
+    "@polkadot-labs/hdkd": "0.0.19",
+    "@polkadot-labs/hdkd-helpers": "0.0.19",
+    "@std/encoding": "npm:@jsr/std__encoding@^1.0.5",
+    "effect": "catalog:",
+    "polkadot-api": "catalog:",
+    "rxjs": "^7.8.2"
+  },
+  "devDependencies": {
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@types/bun": "catalog:"
+  }
+}

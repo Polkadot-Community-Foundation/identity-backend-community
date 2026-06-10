@@ -1,0 +1,26 @@
+{
+  "name": "@identity-backend/vitest-config",
+  "private": true,
+  "license": "MIT",
+  "version": "0.1.0",
+  "type": "module",
+  "module": "./lib/base.js",
+  "exports": {
+    "./package.json": "./package.json",
+    ".": {
+      "import": {
+        "types": "./lib/base.d.ts",
+        "default": "./lib/base.js"
+      }
+    }
+  },
+  "files": [
+    "lib"
+  ],
+  "scripts": {
+    "typecheck": "tsgo --noEmit --incremental"
+  },
+  "devDependencies": {
+    "vitest": "catalog:"
+  }
+}

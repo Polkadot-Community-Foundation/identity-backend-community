@@ -1,0 +1,11 @@
+# Default: ignore everything in .idea/
+*
+
+# Whitelist: shared project-level configuration files
+!.gitignore
+!typescript-compiler.xml
+!deno.xml
+!jsonSchemas.xml
+!codeInsightSettings.xml
+!contentModel.xml
+!externalDependencies.xml

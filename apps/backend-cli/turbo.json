@@ -1,0 +1,25 @@
+{
+  "$schema": "https://turbo.build/schema.json",
+  "extends": ["//"],
+  "tasks": {
+    "build": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "src/**/*.ts",
+        "tsconfig.json"
+      ],
+      "outputs": ["dist/**"]
+    },
+    "prepare": {
+      "dependsOn": ["^build"],
+      "inputs": [
+        "$TURBO_DEFAULT$",
+        "package.json",
+        "tsconfig.json",
+        "src/**/*.ts"
+      ],
+      "outputs": ["dist/**"]
+    }
+  }
+}

@@ -1,0 +1,60 @@
+{
+  "name": "@identity-backend/effect-daemon-spec",
+  "private": true,
+  "license": "MIT",
+  "version": "0.0.1",
+  "author": "Ryan Lee <ryan@parity.io>",
+  "type": "module",
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/mod.ts",
+      "types": "./dist/effect-daemon-spec.d.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit --incremental && tsc --noEmit --incremental",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "mutation": "backend run --cmd 'stryker run --incremental' --stryker",
+    "mutation:full": "backend run --guard --cmd 'stryker run'",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
+    "api:check": "api-extractor run",
+    "api:update": "api-extractor run --local"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@identity-backend/effect-vitest-gherkin": "workspace:^",
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/testing": "workspace:^",
+    "@identity-backend/vitest-config": "workspace:^",
+    "@microsoft/api-extractor": "catalog:",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "fast-check": "catalog:",
+    "tsdown": "catalog:",
+    "vite-tsconfig-paths": "^6.1.1",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": {
+        "types": "./dist/effect-daemon-spec.d.ts",
+        "default": "./dist/index.mjs"
+      },
+      "./package.json": "./package.json"
+    }
+  }
+}

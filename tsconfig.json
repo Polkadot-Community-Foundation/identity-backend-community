@@ -1,0 +1,16 @@
+{
+  "compilerOptions": {
+    "strict": true,
+    "module": "ESNext",
+    "moduleResolution": "Bundler"
+  },
+  "files": [],
+  "references": [
+    {
+      "path": "./tsconfig.scripts.json"
+    },
+    {
+      "path": "./tsconfig.node.json"
+    }
+  ]
+}

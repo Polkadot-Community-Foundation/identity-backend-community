@@ -1,0 +1,62 @@
+name: Docker build
+description: Set up Buildx and run docker/build-push-action with our pnpm-store, turbo-cache, and optional extra build-contexts (e.g. pruned workspace dirs)
+
+inputs:
+  file:
+    description: Path to the Dockerfile
+    required: true
+  tags:
+    description: Image tags (one per line)
+    required: true
+  target:
+    description: Dockerfile target stage
+    required: false
+    default: ""
+  push:
+    description: Push the image after build
+    required: false
+    default: "false"
+  load:
+    description: Load the image into the local daemon
+    required: false
+    default: "false"
+  cache-scope:
+    description: GHA layer cache scope (must match consumers to share layers)
+    required: true
+  build-args:
+    description: Extra build args (one per line)
+    required: false
+    default: ""
+  extra-build-contexts:
+    description: Additional build-contexts as multi-line `name=path` entries (e.g. `prune-identity=.prune-identity`). Passed through to docker/build-push-action on top of the fixed pnpm-store and turbo-cache contexts.
+    required: false
+    default: ""
+  cache-export:
+    description: Export cache to GHA after build
+    required: false
+    default: "true"
+
+runs:
+  using: composite
+  steps:
+    - uses: ./.github/actions/setup-buildx
+
+    - name: Ensure .turbo dir exists
+      shell: bash
+      run: mkdir -p .turbo
+
+    - uses: docker/build-push-action@v6
+      with:
+        context: .
+        file: ${{ inputs.file }}
+        target: ${{ inputs.target }}
+        push: ${{ inputs.push }}
+        load: ${{ inputs.load }}
+        tags: ${{ inputs.tags }}
+        build-contexts: |
+          pnpm-store=${{ env.PNPM_STORE_PATH }}
+          turbo-cache=./.turbo
+          ${{ inputs.extra-build-contexts }}
+        cache-from: type=gha,scope=${{ inputs.cache-scope }}
+        cache-to: ${{ inputs.cache-export == 'true' && format('type=gha,mode=min,scope={0}', inputs.cache-scope) || '' }}
+        build-args: ${{ inputs.build-args }}

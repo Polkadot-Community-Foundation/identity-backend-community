@@ -1,0 +1,1484 @@
+{
+  "version": "8",
+  "dialect": "postgres",
+  "id": "464c880f-b81b-498e-8bf6-8e6909ca73cd",
+  "prevIds": [
+    "fdc6f9d4-cd31-4e4f-9b10-7f620502e1ff"
+  ],
+  "ddl": [
+    {
+      "isRlsEnabled": false,
+      "name": "apple-attestations",
+      "entityType": "tables",
+      "schema": "polkadot_app"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "challenges",
+      "entityType": "tables",
+      "schema": "polkadot_app"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "dim_tickets",
+      "entityType": "tables",
+      "schema": "polkadot_app"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "individuality_usernames",
+      "entityType": "tables",
+      "schema": "polkadot_app"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "invitation_tickets",
+      "entityType": "tables",
+      "schema": "polkadot_app"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "refresh_tokens",
+      "entityType": "tables",
+      "schema": "polkadot_app"
+    },
+    {
+      "isRlsEnabled": false,
+      "name": "username",
+      "entityType": "tables",
+      "schema": "polkadot_app"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "key_id",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "apple-attestations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "public_key",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "apple-attestations"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "receipt",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "apple-attestations"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "sign_count",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "apple-attestations"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "apple-attestations"
+    },
+    {
+      "type": "char(32)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "challenge",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "challenges"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "challenges"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ticket",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "network",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dim",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'5C4hrfjw9DjXZTzV3MwzrrAr9P1MJhSrvWGWqi1eSuyUpnhM'",
+      "generated": null,
+      "identity": null,
+      "name": "inviter",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "false",
+      "generated": null,
+      "identity": null,
+      "name": "registered",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'PENDING'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "onchain_data",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "retry_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "retry_count",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "trace_id",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "span_id",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "username",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "full_username",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "reserved_username",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "varchar(10)",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "digits",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "network",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "candidate_account_id",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "candidate_signature",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "ring_vrf_key",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "proof_of_ownership",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "consumer_registration_signature",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "identifier_key",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'RESERVED'",
+      "generated": null,
+      "identity": null,
+      "name": "status",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'INTERNAL'",
+      "generated": null,
+      "identity": null,
+      "name": "source",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "on_chain_data",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "retry_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "retry_count",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "public_key",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "private_key",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "dim",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "network",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "inviter",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "'available'",
+      "generated": null,
+      "identity": null,
+      "name": "state",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claimed_by",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "claimed_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "gen_random_uuid()",
+      "generated": null,
+      "identity": null,
+      "name": "id",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "user_id",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "token_hash",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "expires_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "family_id",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "uuid",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "rotated_from",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "revoked_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "revoked_reason",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "username",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "network",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "who",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "text",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "signature",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "boolean",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "registered",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "jsonb",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "onchainData",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "retry_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "integer",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "0",
+      "generated": null,
+      "identity": null,
+      "name": "retry_count",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": true,
+      "dimensions": 0,
+      "default": "now()",
+      "generated": null,
+      "identity": null,
+      "name": "created_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "type": "timestamp",
+      "typeSchema": null,
+      "notNull": false,
+      "dimensions": 0,
+      "default": null,
+      "generated": null,
+      "identity": null,
+      "name": "updated_at",
+      "entityType": "columns",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "network",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "dim_ticket_network_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "dim",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "dim_ticket_dim_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "inviter",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "dim_ticket_inviter_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "dim_ticket_status_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "registered",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "dim_ticket_registered_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "retry_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "dim_ticket_retry_at_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "network",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "individuality_username_network_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "status",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "individuality_username_status_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "individuality_username_created_at_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "username",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "individuality_username_username_sort_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "candidate_account_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "individuality_username_candidate_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "source",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "individuality_username_source_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "state",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "dim",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        },
+        {
+          "value": "network",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "invitation_ticket_claimable_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "user_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "refresh_tokens_user_id_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "expires_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "refresh_tokens_expires_at_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "rotated_from",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "refresh_tokens_rotated_from_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "family_id",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "refresh_tokens_family_id_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "network",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "network_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "registered",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "registered_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "created_at",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "created_at_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "username",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "username_sort_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "nameExplicit": true,
+      "columns": [
+        {
+          "value": "who",
+          "isExpression": false,
+          "asc": true,
+          "nullsFirst": false,
+          "opclass": null
+        }
+      ],
+      "isUnique": false,
+      "where": null,
+      "with": "",
+      "method": "btree",
+      "concurrently": false,
+      "name": "who_sort_idx",
+      "entityType": "indexes",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "columns": [
+        "ticket"
+      ],
+      "nameExplicit": false,
+      "name": "dim_tickets_ticket_pk",
+      "entityType": "pks",
+      "schema": "polkadot_app",
+      "table": "dim_tickets"
+    },
+    {
+      "columns": [
+        "username",
+        "network",
+        "digits"
+      ],
+      "nameExplicit": false,
+      "name": "individuality_usernames_username_network_digits_pk",
+      "entityType": "pks",
+      "schema": "polkadot_app",
+      "table": "individuality_usernames"
+    },
+    {
+      "columns": [
+        "username",
+        "network"
+      ],
+      "nameExplicit": false,
+      "name": "username_username_network_pk",
+      "entityType": "pks",
+      "schema": "polkadot_app",
+      "table": "username"
+    },
+    {
+      "columns": [
+        "key_id"
+      ],
+      "nameExplicit": false,
+      "name": "apple-attestations_pkey",
+      "schema": "polkadot_app",
+      "table": "apple-attestations",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "challenge"
+      ],
+      "nameExplicit": false,
+      "name": "challenges_pkey",
+      "schema": "polkadot_app",
+      "table": "challenges",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "public_key"
+      ],
+      "nameExplicit": false,
+      "name": "invitation_tickets_pkey",
+      "schema": "polkadot_app",
+      "table": "invitation_tickets",
+      "entityType": "pks"
+    },
+    {
+      "columns": [
+        "id"
+      ],
+      "nameExplicit": false,
+      "name": "refresh_tokens_pkey",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens",
+      "entityType": "pks"
+    },
+    {
+      "nameExplicit": false,
+      "columns": [
+        "token_hash"
+      ],
+      "nullsNotDistinct": false,
+      "name": "refresh_tokens_token_hash_unique",
+      "schema": "polkadot_app",
+      "table": "refresh_tokens",
+      "entityType": "uniques"
+    }
+  ],
+  "renames": []
+}

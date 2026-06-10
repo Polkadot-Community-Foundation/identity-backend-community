@@ -1,0 +1,1 @@
+DROP TABLE "kilt_usernames" CASCADE;

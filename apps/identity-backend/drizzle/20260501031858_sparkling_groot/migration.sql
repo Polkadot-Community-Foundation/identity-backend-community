@@ -1,0 +1,2 @@
+ALTER TABLE "polkadot_app"."push_subscription" RENAME COLUMN "client_pubkey" TO "client_id";--> statement-breakpoint
+ALTER INDEX "polkadot_app"."push_subscription_client_pubkey_idx" RENAME TO "push_subscription_client_id_idx";

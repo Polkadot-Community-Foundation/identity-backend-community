@@ -1,0 +1,39 @@
+name: Install apt packages
+description: Install apt packages with .deb caching via actions/cache.
+
+inputs:
+  packages:
+    description: Space-separated list of apt packages to install.
+    required: true
+
+runs:
+  using: composite
+  steps:
+    - id: key
+      shell: bash
+      run: |
+        set -euo pipefail
+        codename=$(lsb_release -cs)
+        hash=$(echo '${{ inputs.packages }}' | tr ' ' '\n' | sort -u | sha256sum | cut -c1-16)
+        echo "key=apt-${RUNNER_OS}-${codename}-${hash}" >> "$GITHUB_OUTPUT"
+
+    - name: Prepare apt archive dir
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo install -d -o "$(id -u)" -g "$(id -g)" \
+          /var/cache/apt/archives /var/cache/apt/archives/partial
+
+    - uses: actions/cache@v4
+      with:
+        path: /var/cache/apt/archives/*.deb
+        key: ${{ steps.key.outputs.key }}
+
+    - name: Install
+      shell: bash
+      run: |
+        set -euo pipefail
+        sudo apt-get update -qq
+        sudo apt-get install -y --no-install-recommends \
+          -o APT::Keep-Downloaded-Packages=true \
+          ${{ inputs.packages }}
