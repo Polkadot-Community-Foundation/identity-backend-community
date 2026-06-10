@@ -1,0 +1,46 @@
+name: Checks
+
+on:
+  workflow_call:
+    secrets:
+      TURBO_TOKEN:
+        required: false
+
+permissions:
+  contents: read
+
+jobs:
+  check:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+    steps:
+      - uses: actions/checkout@v5
+        with:
+          fetch-depth: 2
+      - uses: ./.github/actions/install-deps
+      - run: corepack pnpm run build
+      - run: corepack pnpm check:ci
+
+  check-peer-deps:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/setup-pnpm-toolchain
+      - run: corepack pnpm install --strict-peer-dependencies
+
+  test:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      NODE_OPTIONS: "--max-old-space-size=4096"
+      TURBO_TEAM: ${{ vars.TURBO_TEAM }}
+      TURBO_TOKEN: ${{ secrets.TURBO_TOKEN }}
+      TURBO_CONCURRENCY: "100%"
+    steps:
+      - uses: actions/checkout@v5
+      - uses: ./.github/actions/install-deps
+      - run: corepack pnpm run build
+      - run: corepack pnpm test

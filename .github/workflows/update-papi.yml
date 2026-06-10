@@ -1,0 +1,39 @@
+name: Update PAPI
+
+on:
+  schedule:
+    - cron: "0 8 * * *"
+  workflow_dispatch:
+
+jobs:
+  update-papi:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v5
+
+      - uses: ./.github/actions/install-apt-packages
+        with:
+          packages: unzip gcc make g++
+
+      - uses: ./.github/actions/setup-bun-runtime
+
+      - name: Update PAPI
+        run: |
+          cd packages/descriptors
+          bun add -g polkadot-api
+          bunx papi update
+          bun add -g dprint
+          bunx dprint fmt
+      - name: Create Pull Request
+        uses: peter-evans/create-pull-request@v7
+        with:
+          token: ${{ secrets.GITHUB_TOKEN }}
+          commit-message: Update PAPI
+          title: "chore: Update PAPI"
+          body: |
+            This PR updates the PAPI (Polkadot API) files.
+
+            Automated changes by the update-papi workflow.
+          branch: update-papi
+          delete-branch: true
+          base: main

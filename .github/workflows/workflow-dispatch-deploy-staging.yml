@@ -1,0 +1,52 @@
+name: Deploy to Staging
+
+on:
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to deploy (defaults to latest main build)"
+        required: false
+        type: string
+
+concurrency:
+  group: deploy-staging
+  cancel-in-progress: false
+
+permissions:
+  id-token: write
+  contents: read
+  packages: write
+
+jobs:
+  publish-image:
+    name: Publish Image
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      IMAGE_NAME: ${{ github.event.repository.name }}
+      GAR_REGISTRY: "us-docker.pkg.dev/polkadot-community-foundation/identity-backend"
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Set version
+        id: version
+        shell: bash
+        run: |
+          if [ -n "${{ inputs.tag }}" ]; then
+            VERSION="${{ inputs.tag }}"
+          else
+            VERSION="$(date -u '+%Y%m%d-%H%M%S')-${GITHUB_SHA::8}"
+          fi
+          echo "VERSION=$VERSION" >> "$GITHUB_ENV"
+
+      - uses: ./.github/actions/gar-auth
+        with:
+          service-account: ${{ secrets.GCP_SA_GITHUB }}
+          workload-identity-provider: ${{ secrets.GCP_WIP_GITHUB }}
+      - uses: ./.github/actions/build-images
+        with:
+          push: "true"
+          version: ${{ env.VERSION }}
+          gar-registry: ${{ env.GAR_REGISTRY }}
+          vcs-ref: ${{ github.sha }}
+      - run: echo "Images published - app:${{ env.GAR_REGISTRY }}/${{ env.IMAGE_NAME }}:${{ env.VERSION }} startup:${{ env.GAR_REGISTRY }}/${{ env.IMAGE_NAME }}:e2e-startup-${{ env.VERSION }}"
