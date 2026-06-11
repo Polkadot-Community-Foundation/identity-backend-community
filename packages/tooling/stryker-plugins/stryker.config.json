@@ -7,11 +7,7 @@
   ],
   "plugins": [
     "@stryker-mutator/vitest-runner",
-    "@stryker-mutator/typescript-checker",
-    "@identity-backend/stryker-plugins/effect-schema-ignorer"
-  ],
-  "ignorers": [
-    "effect-schema-declarations"
+    "@stryker-mutator/typescript-checker"
   ],
   "reporters": [
     "progress",
@@ -29,7 +25,6 @@
     "dir": ".",
     "related": true
   },
-  "tsconfigFile": "tsconfig.stryker.json",
   "typescriptChecker": {
     "prioritizePerformanceOverAccuracy": false
   },
@@ -37,7 +32,16 @@
   "incremental": true,
   "incrementalFile": "reports/stryker-incremental.json",
   "mutate": [
-    "src/**/*.workflow.ts"
+    "src/**/*.ts",
+    "!src/**/*.test.ts",
+    "!src/**/*.tst.ts",
+    "!src/**/*.schema.ts",
+    "!src/**/index.ts",
+    "!src/mod.ts"
+  ],
+  "ignorePatterns": [
+    "reports",
+    "coverage"
   ],
   "thresholds": {
     "high": 100,

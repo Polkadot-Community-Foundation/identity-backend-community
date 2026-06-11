@@ -433,14 +433,21 @@ export const noEitherTagAssertions = defineRule({
       if (obj.type !== 'MemberExpression') return
 
       const unwrapSide = isUnwrapMember(obj)
-      if (unwrapSide != null) {
-        const source = getSourceText(obj.object)
-        context.report({
-          node: node.property,
-          messageId: 'unwrapTagAccess',
-          data: { name: `${source}.${unwrapSide}._tag` },
-        })
-      }
+      if (unwrapSide == null) return
+
+      const parent = node.parent
+      if (parent?.type !== 'BinaryExpression') return
+      if (!COMPARISON_OPS.has(parent.operator)) return
+
+      const otherOperand = parent.left === node ? parent.right : parent.left
+      if (!isEitherTagLiteral(otherOperand)) return
+
+      const source = getSourceText(obj.object)
+      context.report({
+        node: node.property,
+        messageId: 'unwrapTagAccess',
+        data: { name: `${source}.${unwrapSide}._tag` },
+      })
     }
 
     const checkTypeGuardAssertion = (node: ESTree.CallExpression): void => {

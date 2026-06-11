@@ -37,6 +37,10 @@ ruleTester.run('pbt-naming', pbtNaming, {
       code: "it.prop('→Shipped_Cancel_⊥', [Schema.Boolean], ([s]) => s === s)",
     },
     {
+      name: 'Should_Pass_When_BareFalsumNeedsNoOperand',
+      code: "it.prop('∀x_AllExhausted_⊥', [Schema.Number], ([n]) => n === n)",
+    },
+    {
       name: 'Should_Pass_When_ForAll_FilterSubset_SubsetOfInput',
       code: "it.prop('∀items_Filter_⊆Input', [Schema.Number], ([n]) => n === n)",
     },
@@ -86,8 +90,20 @@ ruleTester.run('pbt-naming', pbtNaming, {
       code: "it.prop('∀f_Double_≠Zero', [Schema.Number], ([n]) => n !== 0)",
     },
     {
-      name: 'Should_Pass_When_ScopeVarEmpty_FirstUnderscoreAtOne',
-      code: "it.prop('∀_Domain_=x', [Schema.String], ([s]) => s === s)",
+      name: 'Should_Pass_When_Impossibility_NamesForbiddenOutcome',
+      code: "it.prop('∀o_ShippedOrder_⊥Cancellable', [Schema.Boolean], ([s]) => s === s)",
+    },
+    {
+      name: 'Should_Pass_When_MultiCharBinderAndConceptOperand',
+      code: "it.prop('∀items_Dedupe_⊆Items', [Schema.Number], ([n]) => n === n)",
+    },
+    {
+      name: 'Should_Pass_When_NumericPredicateOperand',
+      code: "it.prop('∀n_Length_=2', [Schema.Number], ([n]) => n === n)",
+    },
+    {
+      name: 'Should_Pass_When_CompoundLogicalAntecedentInScope',
+      code: "it.prop('→VoipPush∧Voip_Routing_=Apns', [Schema.Boolean], ([s]) => s === s)",
     },
   ],
   invalid: [
@@ -175,6 +191,21 @@ ruleTester.run('pbt-naming', pbtNaming, {
       name: 'Should_Report_When_PredicateSymbolNotInSet',
       code: "it.prop('∀x_EncodeDecode_∀x', [Schema.String], ([s]) => s === s)",
       errors: [{ messageId: 'invalidPredicateSymbol' }],
+    },
+    {
+      name: 'Should_Report_When_ScopeBinderMissing',
+      code: "it.prop('∀_Domain_=x', [Schema.String], ([s]) => s === s)",
+      errors: [{ messageId: 'incompleteScope', data: { symbol: '∀', scope: '∀' } }],
+    },
+    {
+      name: 'Should_Report_When_PredicateOperandMissingEquals',
+      code: "it.prop('∀x_EncodeDecode_=', [Schema.String], ([s]) => s === s)",
+      errors: [{ messageId: 'incompletePredicate', data: { symbol: '=', predicate: '=' } }],
+    },
+    {
+      name: 'Should_Report_When_DomainLeaksDAMP_Given',
+      code: "it.prop('∀x_GivenShipped_=x', [Schema.String], ([s]) => s === s)",
+      errors: [{ messageId: 'domainLeaksDAMP', data: { domain: 'GivenShipped', word: 'Given' } }],
     },
   ],
 })

@@ -14,7 +14,11 @@ const mockPlayIntegrityMiddleware = createMiddleware(async (c, next) => {
 })
 
 const mockAppAttestMiddleware = createMiddleware(async (c, next) => {
-  if (c.req.header('Auth-iOS-Package') === 'invalid') {
+  const iosPackage = c.req.header('Auth-iOS-Package')
+  if (iosPackage === undefined) {
+    return c.json({ error: 'Missing iOS package name header' }, 401)
+  }
+  if (iosPackage === 'invalid') {
     return c.json({ error: 'Invalid iOS package' }, 401)
   }
   return next()
@@ -41,6 +45,14 @@ describe('Auth Plugin Test', () => {
         return testClient(app)
       })
     })
+
+  const completeIosAssertion = (iosPackage: string) => ({
+    'Auth-iOS-Package': iosPackage,
+    'Auth-Payload': 'some-payload',
+    'Auth-iOS-KeyId': 'some-key-id',
+    'Auth-Challenge': 'some-challenge',
+    'Auth-ClientId': 'some-client-id',
+  })
 
   it.effect('Should_EnforceAuthHeaders_When_EnforceAuthIsTrue', () =>
     Effect.gen(function*() {
@@ -156,15 +168,13 @@ describe('Auth Plugin Test', () => {
       })
     }))
 
-  it.effect('Should_HandleInvalidiOSPackage_When_InvalidPackage', () =>
+  it.effect('Should_VerifyAppAttest_When_IosAssertionCompleteButPackageInvalid', () =>
     Effect.gen(function*() {
       const client = yield* makeClient(true)
 
       const response = yield* Effect.tryPromise(() =>
         client.index.$get({}, {
-          headers: {
-            'Auth-iOS-Package': 'invalid',
-          },
+          headers: completeIosAssertion('invalid'),
         })
       )
       const jsonResponse = yield* Effect.promise(() => response.json())
@@ -181,7 +191,7 @@ describe('Auth Plugin Test', () => {
       const response = yield* Effect.tryPromise(() =>
         client.index.$get({}, {
           headers: {
-            'Auth-iOS-Package': 'valid.ios.package',
+            ...completeIosAssertion('valid.ios.package'),
             'Auth-Attestation-Type': 'unknown',
           },
         })
@@ -229,5 +239,95 @@ describe('Auth Plugin Test', () => {
         error: "Only one of ['Auth-iOS-Package', 'Auth-Android-Package'] is allowed",
       })
       checkResponse(response, 401)
+    }))
+
+  it.effect('Should_FallThroughToDispatch_When_OnlyAttestationTokenPresentAndEnforced', () =>
+    Effect.gen(function*() {
+      const client = yield* makeClient(true)
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$get({}, {
+          headers: {
+            'Auth-Attestation-Token': 'some-token',
+          },
+        })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'MissingAttestationTypeHeader',
+        error: 'Missing Auth-Attestation-Type header. Android requests must declare play-integrity or key-attestation.',
+      })
+      checkResponse(response, 400)
+    }))
+
+  it.effect('Should_SkipAppAttest_When_SoftGateAndNoIosPackage', () =>
+    Effect.gen(function*() {
+      const client = yield* makeClient(false)
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$get({}, {
+          headers: {
+            'Auth-Payload': 'some-payload',
+          },
+        })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({ success: true })
+      checkResponse(response, 200)
+    }))
+
+  it.effect('Should_RejectAppAttest_When_SoftGateAndIosAssertionIncomplete', () =>
+    Effect.gen(function*() {
+      const client = yield* makeClient(false)
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$get({}, {
+          headers: {
+            'Auth-iOS-Package': 'valid.ios.package',
+          },
+        })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'IncompleteAssertion',
+        error: 'Missing required App Attest headers: Auth-Payload, Auth-iOS-KeyId, Auth-Challenge, Auth-ClientId',
+        missing: ['Auth-Payload', 'Auth-iOS-KeyId', 'Auth-Challenge', 'Auth-ClientId'],
+      })
+      checkResponse(response, 401)
+    }))
+
+  it.effect('Should_RejectAppAttest_When_EnforcedAndIosAssertionIncomplete', () =>
+    Effect.gen(function*() {
+      const client = yield* makeClient(true)
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$get({}, {
+          headers: {
+            'Auth-iOS-Package': 'valid.ios.package',
+            'Auth-Payload': 'some-payload',
+          },
+        })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'IncompleteAssertion',
+        error: 'Missing required App Attest headers: Auth-iOS-KeyId, Auth-Challenge, Auth-ClientId',
+        missing: ['Auth-iOS-KeyId', 'Auth-Challenge', 'Auth-ClientId'],
+      })
+      checkResponse(response, 401)
+    }))
+
+  it.effect('Should_VerifyAppAttest_When_IosAssertionCompleteAndPackageValid', () =>
+    Effect.gen(function*() {
+      const client = yield* makeClient(false)
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$get({}, {
+          headers: completeIosAssertion('valid.ios.package'),
+        })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({ success: true })
+      checkResponse(response, 200)
     }))
 })

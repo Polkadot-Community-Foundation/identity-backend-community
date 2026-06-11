@@ -69,7 +69,7 @@ const ticketWithRetryArb = Arbitrary.make(DimTicketRecord).chain(base =>
 
 describe('planBatchProcessing', () => {
   it.prop(
-    '∀_EmptyInput_=∅',
+    '∀now_EmptyInput_=∅',
     [safeDateArb],
     ([now]) => {
       const result = planBatchProcessing([], makeConfig(now))
@@ -126,7 +126,7 @@ describe('planBatchProcessing', () => {
   )
 
   it.prop(
-    '∀_NoSubmitted_¬Orphaned',
+    '∀tickets_NoSubmitted_¬Orphaned',
     [fc.array(pendingArb, { minLength: 1, maxLength: 10 }), safeDateArb],
     ([tickets, now]) => {
       const result = planBatchProcessing(tickets, makeConfig(now))

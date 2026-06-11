@@ -44,6 +44,21 @@ describe('settleBatchAttempt', () => {
   )
 
   it.prop(
+    '∀x_SucceededAtMax_∈BatchSteady',
+    [
+      Arbitrary.make(BatchSizePolicy).map((policy) => ({
+        policy,
+        current: BatchSize.make(policy.max),
+      })),
+    ],
+    ([{ policy, current }]) =>
+      Either.match(settle(policy, current, new Succeeded({})), {
+        onLeft: () => false,
+        onRight: (a) => a._tag === 'BatchSteady' && a.size === current,
+      }),
+  )
+
+  it.prop(
     '∀x_ExhaustedThrottlesDownToFloor_=x',
     [arbPolicyAndCurrent],
     ([{ policy, current }]) =>

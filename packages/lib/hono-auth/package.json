@@ -36,7 +36,9 @@
     "build": "tsdown",
     "typecheck": "tsgo --noEmit --incremental",
     "lint": "oxlint . ${AGENT:+--format=unix --quiet}",
-    "test": "vitest run"
+    "test": "vitest run",
+    "mutation": "backend run --cmd 'stryker run --incremental' --stryker",
+    "mutation:full": "backend run --guard --cmd 'stryker run'"
   },
   "dependencies": {
     "@identity-backend/app-attest": "workspace:^",
@@ -48,9 +50,13 @@
     "@effect/vitest": "catalog:",
     "@identity-backend/auth": "workspace:^",
     "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/stryker-plugins": "workspace:^",
     "@identity-backend/testing": "workspace:^",
     "@identity-backend/play-integrity": "workspace:^",
     "@identity-backend/vitest-config": "workspace:^",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
     "hono": "^4.12.18",

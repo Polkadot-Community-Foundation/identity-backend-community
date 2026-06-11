@@ -14,7 +14,7 @@ import { DB } from '@identity-backend/db'
 import { Daemon } from '@identity-backend/effect-daemon-spec'
 import { fromObservable } from '@identity-backend/rx-effect'
 import { and, eq } from 'drizzle-orm'
-import { Array, Clock, Context, Duration, Effect, Either, Metric, pipe, Ref, Schedule, Stream } from 'effect'
+import { Array, Clock, Context, Duration, Effect, Either, Metric, Option, pipe, Ref, Schedule, Stream } from 'effect'
 import { Binary, type PolkadotSigner, type TxFinalized } from 'polkadot-api'
 
 interface ProcessedEvents {
@@ -273,7 +273,7 @@ export const make = Effect.gen(function*() {
   const individualityAuthority = createPeopleSigner(config.keypair)
   const { operationsTotalCounter, operationsFailuresCounter } = config
 
-  const work = Effect.gen(function*() {
+  const prereq = Effect.gen(function*() {
     const now = yield* Clock.currentTimeMillis
     const batchSize = yield* Ref.get(batchSizeRef)
     const unregisteredUsernames = yield* pipe(
@@ -297,190 +297,195 @@ export const make = Effect.gen(function*() {
         ),
       ),
     )
+    return Option.liftPredicate(unregisteredUsernames, (found) => found.length > 0)
+  }).pipe(Effect.orDie)
 
-    yield* Effect.annotateLogsScoped({
-      usernames: Array.map(unregisteredUsernames, ({ username }) => username),
-    })
+  const work = (unregisteredUsernames: ReadonlyArray<IndividualityUsername>) =>
+    Effect.gen(function*() {
+      yield* Effect.annotateLogsScoped({
+        usernames: Array.map(unregisteredUsernames, ({ username }) => username),
+      })
 
-    if (unregisteredUsernames.length === 0) return
-
-    yield* Effect.linkSpanCurrent(
-      buildSpanLinks(unregisteredUsernames, (u) => ({ 'username': `${u.username}` })),
-    )
-
-    yield* pipe(
-      Effect.all(
-        [
-          utilityAPI.getSs58Prefix(),
-          utilityAPI.getLatestFinalizedBlock(),
-        ],
-        { concurrency: 'unbounded' },
-      ),
-      Effect.map(([ss58Prefix, currentBlockNumber]) => ({ ss58Prefix, currentBlockNumber })),
-      Effect.tap(({ ss58Prefix, currentBlockNumber }) => Effect.annotateLogsScoped({ ss58Prefix, currentBlockNumber })),
-    )
-
-    const successRef = yield* Ref.make(false)
-
-    yield* Effect.gen(function*() {
-      yield* operationsTotalCounter(Effect.succeed(unregisteredUsernames.length))
-
-      yield* Effect.logInfo('Register People Usernames Job Started')
-
-      const attestParams = Array.map(
-        unregisteredUsernames,
-        ({
-          candidateAccountId,
-          username,
-          candidateSignature,
-          ringVrfKey,
-          proofOfOwnership,
-          consumerRegistrationSignature,
-          identifierKey,
-          digits,
-          reservedUsername,
-        }) => ({
-          candidate: candidateAccountId,
-          candidateSignature: Binary.fromHex(candidateSignature),
-          ringVrfKey: Binary.fromHex(ringVrfKey),
-          proofOfOwnership: Binary.fromHex(proofOfOwnership),
-          consumerRegistration: {
-            signature: Binary.fromHex(consumerRegistrationSignature),
-            account: candidateAccountId,
-            identifierKey: Binary.fromHex(identifierKey),
-            username: `${username}.${digits}`,
-            reservedUsername: reservedUsername ?? undefined,
-          },
-        }),
+      yield* Effect.linkSpanCurrent(
+        buildSpanLinks(unregisteredUsernames, (u) => ({ 'username': `${u.username}` })),
       )
 
-      const tx = yield* config.proxyDelegationEnabled
-        ? Effect.gen(function*() {
-          const batchTx = yield* peopleApi.attests(attestParams)
-          const ss58Address = yield* utilityAPI.computeSs58Address(config.attesterPublicKey)
-          return yield* peopleApi.proxy({
-            real: ss58Address,
-            force_proxy_type: 'Any',
-            call: batchTx.decodedCall,
-          })
-        })
-        : peopleApi.attests(attestParams)
-
-      yield* Effect.logDebug('Register People usernames extrinsic started')
-
-      const submission = yield* Effect.either(pipe(
-        Effect.sync(() => tx.signSubmitAndWatch(individualityAuthority)),
-        Effect.map(fromObservable((err) => new TransactionSubmitError({ cause: err }))),
-        Effect.andThen((stream) =>
-          pipe(
-            stream,
-            Stream.tap(logTxEvent),
-            watchThroughReorgs,
-            runTxFinalized({ timeout: config.submitTimeout }),
-          )
+      yield* pipe(
+        Effect.all(
+          [
+            utilityAPI.getSs58Prefix(),
+            utilityAPI.getLatestFinalizedBlock(),
+          ],
+          { concurrency: 'unbounded' },
         ),
-      ))
-      yield* recordBatchOutcome(outcomeFromTxResult(submission)).pipe(
-        Effect.provideService(RecordBatchOutcomeDeps, batchBackoff),
+        Effect.map(([ss58Prefix, currentBlockNumber]) => ({ ss58Prefix, currentBlockNumber })),
+        Effect.tap(({ ss58Prefix, currentBlockNumber }) =>
+          Effect.annotateLogsScoped({ ss58Prefix, currentBlockNumber })
+        ),
       )
 
-      if (Either.isLeft(submission)) {
-        yield* Effect.logWarning('Register People usernames extrinsic failed', { 'error.type': submission.left._tag })
-        return
-      }
-      if (!submission.right.ok) {
-        return
-      }
+      const successRef = yield* Ref.make(false)
 
-      const txResult = submission.right
-      yield* Effect.annotateLogsScoped({
-        blockHash: txResult.block.hash,
-        blockNumber: txResult.block.number,
-        blockIndex: txResult.block.index,
-        txHash: txResult.txHash,
-      })
+      yield* Effect.gen(function*() {
+        yield* operationsTotalCounter(Effect.succeed(unregisteredUsernames.length))
 
-      yield* Effect.logDebug('Register People usernames extrinsic completed')
+        yield* Effect.logInfo('Register People Usernames Job Started')
 
-      const processedEvents = yield* processEvents(txResult.events, utilityAPI)
-      yield* Ref.set(successRef, true)
-      yield* operationsFailuresCounter(Effect.succeed(processedEvents.terminalErrors.length))
-
-      yield* Effect.logDebug('Committing Register People usernames results to database')
-
-      const registeredUsernames = Array.map(
-        [...processedEvents.successes, ...processedEvents.alreadyRegistered],
-        (i) => unregisteredUsernames[i]!,
-      )
-
-      const notRegisteredUsernames = processedEvents.terminalErrors.map(
-        ({ index }) => unregisteredUsernames[index]!,
-      )
-
-      if (processedEvents.terminalErrors.length > 0) {
-        yield* Effect.forEach(
-          processedEvents.terminalErrors,
-          ({ index, reason }) =>
-            Effect.logWarning('Terminal username registration failure').pipe(
-              Effect.annotateLogs({
-                'username.lite': `${unregisteredUsernames[index]!.username}.${unregisteredUsernames[index]!.digits}`,
-                'error.category': 'blockchain',
-                'error.subcategory': 'people-lite-attestation',
-                'error.type': reason,
-                'error.retryable': false,
-              }),
-            ),
-          { discard: true },
+        const attestParams = Array.map(
+          unregisteredUsernames,
+          ({
+            candidateAccountId,
+            username,
+            candidateSignature,
+            ringVrfKey,
+            proofOfOwnership,
+            consumerRegistrationSignature,
+            identifierKey,
+            digits,
+            reservedUsername,
+          }) => ({
+            candidate: candidateAccountId,
+            candidateSignature: Binary.fromHex(candidateSignature),
+            ringVrfKey: Binary.fromHex(ringVrfKey),
+            proofOfOwnership: Binary.fromHex(proofOfOwnership),
+            consumerRegistration: {
+              signature: Binary.fromHex(consumerRegistrationSignature),
+              account: candidateAccountId,
+              identifierKey: Binary.fromHex(identifierKey),
+              username: `${username}.${digits}`,
+              reservedUsername: reservedUsername ?? undefined,
+            },
+          }),
         )
-      }
 
-      if (processedEvents.retryableItems.length > 0) {
-        yield* Effect.forEach(
-          processedEvents.retryableItems,
-          (index) =>
-            Effect.logWarning('Username registration will be retried').pipe(
-              Effect.annotateLogs({
-                'username.lite': `${unregisteredUsernames[index]!.username}.${unregisteredUsernames[index]!.digits}`,
-                'error.category': 'blockchain',
-                'error.subcategory': 'people-lite-attestation',
-                'error.retryable': true,
-              }),
-            ),
-          { discard: true },
+        const tx = yield* config.proxyDelegationEnabled
+          ? Effect.gen(function*() {
+            const batchTx = yield* peopleApi.attests(attestParams)
+            const ss58Address = yield* utilityAPI.computeSs58Address(config.attesterPublicKey)
+            return yield* peopleApi.proxy({
+              real: ss58Address,
+              force_proxy_type: 'Any',
+              call: batchTx.decodedCall,
+            })
+          })
+          : peopleApi.attests(attestParams)
+
+        yield* Effect.logDebug('Register People usernames extrinsic started')
+
+        const submission = yield* Effect.either(pipe(
+          Effect.sync(() => tx.signSubmitAndWatch(individualityAuthority)),
+          Effect.map(fromObservable((err) => new TransactionSubmitError({ cause: err }))),
+          Effect.andThen((stream) =>
+            pipe(
+              stream,
+              Stream.tap(logTxEvent),
+              watchThroughReorgs,
+              runTxFinalized({ timeout: config.submitTimeout }),
+            )
+          ),
+        ))
+        yield* recordBatchOutcome(outcomeFromTxResult(submission)).pipe(
+          Effect.provideService(RecordBatchOutcomeDeps, batchBackoff),
         )
-      }
 
-      yield* Effect.annotateLogsScoped({
-        registeredUsernames: Array.map(registeredUsernames, ({ username }) => username),
-        notRegisteredUsernames: Array.map(notRegisteredUsernames, ({ username }) => username),
-      })
+        if (Either.isLeft(submission)) {
+          yield* Effect.logWarning('Register People usernames extrinsic failed', { 'error.type': submission.left._tag })
+          return
+        }
+        if (!submission.right.ok) {
+          return
+        }
 
-      yield* updateDB({
-        ...txResult,
-        unregisteredUsernames,
-        processedEvents,
-      })
+        const txResult = submission.right
+        yield* Effect.annotateLogsScoped({
+          blockHash: txResult.block.hash,
+          blockNumber: txResult.block.number,
+          blockIndex: txResult.block.index,
+          txHash: txResult.txHash,
+        })
 
-      yield* Effect.logDebug('Committed Register People usernames results to database')
-      yield* Effect.log('Register People usernames job completed')
+        yield* Effect.logDebug('Register People usernames extrinsic completed')
+
+        const processedEvents = yield* processEvents(txResult.events, utilityAPI)
+        yield* Ref.set(successRef, true)
+        yield* operationsFailuresCounter(Effect.succeed(processedEvents.terminalErrors.length))
+
+        yield* Effect.logDebug('Committing Register People usernames results to database')
+
+        const registeredUsernames = Array.map(
+          [...processedEvents.successes, ...processedEvents.alreadyRegistered],
+          (i) => unregisteredUsernames[i]!,
+        )
+
+        const notRegisteredUsernames = processedEvents.terminalErrors.map(
+          ({ index }) => unregisteredUsernames[index]!,
+        )
+
+        if (processedEvents.terminalErrors.length > 0) {
+          yield* Effect.forEach(
+            processedEvents.terminalErrors,
+            ({ index, reason }) =>
+              Effect.logWarning('Terminal username registration failure').pipe(
+                Effect.annotateLogs({
+                  'username.lite': `${unregisteredUsernames[index]!.username}.${unregisteredUsernames[index]!.digits}`,
+                  'error.category': 'blockchain',
+                  'error.subcategory': 'people-lite-attestation',
+                  'error.type': reason,
+                  'error.retryable': false,
+                }),
+              ),
+            { discard: true },
+          )
+        }
+
+        if (processedEvents.retryableItems.length > 0) {
+          yield* Effect.forEach(
+            processedEvents.retryableItems,
+            (index) =>
+              Effect.logWarning('Username registration will be retried').pipe(
+                Effect.annotateLogs({
+                  'username.lite': `${unregisteredUsernames[index]!.username}.${unregisteredUsernames[index]!.digits}`,
+                  'error.category': 'blockchain',
+                  'error.subcategory': 'people-lite-attestation',
+                  'error.retryable': true,
+                }),
+              ),
+            { discard: true },
+          )
+        }
+
+        yield* Effect.annotateLogsScoped({
+          registeredUsernames: Array.map(registeredUsernames, ({ username }) => username),
+          notRegisteredUsernames: Array.map(notRegisteredUsernames, ({ username }) => username),
+        })
+
+        yield* updateDB({
+          ...txResult,
+          unregisteredUsernames,
+          processedEvents,
+        })
+
+        yield* Effect.logDebug('Committed Register People usernames results to database')
+        yield* Effect.log('Register People usernames job completed')
+      }).pipe(
+        Effect.ensuring(
+          Effect.gen(function*() {
+            if (!(yield* Ref.get(successRef))) {
+              yield* operationsFailuresCounter(Effect.succeed(unregisteredUsernames.length))
+            }
+          }),
+        ),
+      )
     }).pipe(
-      Effect.ensuring(
-        Effect.gen(function*() {
-          if (!(yield* Ref.get(successRef))) {
-            yield* operationsFailuresCounter(Effect.succeed(unregisteredUsernames.length))
-          }
-        }),
-      ),
-    )
-  })
-
-  return Daemon.poll({
-    name: 'people-lite-attestation',
-    work: work.pipe(
       Effect.provideService(DB, db),
       Effect.scoped,
       Effect.orDie,
-    ),
+    )
+
+  return Daemon.poll({
+    name: 'people-lite-attestation',
+    prereq,
+    work,
     interval: config.pollInterval,
     tick: {
       spanName: 'jobs.people_lite.attest',

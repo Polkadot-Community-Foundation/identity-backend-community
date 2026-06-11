@@ -311,7 +311,8 @@ export const ENFORCE_AUTH = pipe(
   Config.boolean('ENFORCE_AUTH'),
   Config.withDefault(false),
   Config.withDescription(
-    'When false, requests without auth headers will be allowed through. When true, auth headers are required.',
+    'When false, requests without auth headers pass through and the App Attest soft gate is active. When true, auth headers ' +
+      'are required and every iOS request is App Attest verified.',
   ),
 )
 export const APPLE_APP_ATTEST_APP_IDS = pipe(

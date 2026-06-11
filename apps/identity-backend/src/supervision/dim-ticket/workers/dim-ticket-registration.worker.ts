@@ -1,7 +1,7 @@
 import { DimTicketDaemonShell } from '#root/features/dim/dim-ticket-daemon.shell.js'
 import { dimTicketRegistrationLatencyHistogram } from '#root/features/dim/dim-ticket.metrics.js'
 import { Daemon } from '@identity-backend/effect-daemon-spec'
-import { Clock, Context, Duration, Effect, Schedule } from 'effect'
+import { Clock, Context, Duration, Effect, Option, Schedule } from 'effect'
 
 /** Tunables for the dim-ticket registration worker. */
 export interface DimTicketRegistrationRuntimeConfig {
@@ -44,17 +44,32 @@ export const make = Effect.gen(function*() {
   const config = yield* DimTicketRegistrationConfig
   const shell = yield* DimTicketDaemonShell
 
-  const work = Effect.gen(function*() {
+  type PendingBatch = {
+    readonly now: number
+    readonly tickets: Effect.Effect.Success<ReturnType<typeof shell.fetchPendingTickets>>
+  }
+
+  const logTickError = <E extends { readonly _tag: string }>(error: E) =>
+    Effect.logError('Dim ticket tick failed', {
+      'error.type': error._tag,
+      'error.category': 'category' in error ? String(error.category) : 'unknown',
+      'error.retryable': 'retryable' in error ? Boolean(error.retryable) : false,
+    })
+
+  const prereq = Effect.gen(function*() {
     const now = yield* Clock.currentTimeMillis
     const tickets = yield* shell.fetchPendingTickets(now, config.batchSize)
-    const fetchedCount = tickets.length
-    yield* shell.processTickets(tickets, now, config.maxRetries)
-    if (fetchedCount > 0) {
-      yield* Effect.logInfo('Fetched pending tickets', { 'dim.ticket.fetched': fetchedCount })
-    }
-  }).pipe(
-    Effect.withLogSpan('dim_ticket.poll_cycle'),
-  )
+    return Option.liftPredicate({ now, tickets }, (batch) => batch.tickets.length > 0)
+  }).pipe(Effect.tapError(logTickError))
+
+  const work = (batch: PendingBatch) =>
+    Effect.gen(function*() {
+      yield* shell.processTickets(batch.tickets, batch.now, config.maxRetries)
+      yield* Effect.logInfo('Fetched pending tickets', { 'dim.ticket.fetched': batch.tickets.length })
+    }).pipe(
+      Effect.withLogSpan('dim_ticket.poll_cycle'),
+      Effect.tapError(logTickError),
+    )
 
   return Daemon.poll({
     name: 'dim-ticket-registration',
@@ -72,14 +87,7 @@ export const make = Effect.gen(function*() {
       ),
     },
     lock: { mode: 'none' },
-    work: work.pipe(
-      Effect.tapError((error) =>
-        Effect.logError('Dim ticket tick failed', {
-          'error.type': error._tag,
-          'error.category': 'category' in error ? String(error.category) : 'unknown',
-          'error.retryable': 'retryable' in error ? Boolean(error.retryable) : false,
-        })
-      ),
-    ),
+    prereq,
+    work,
   })
 })

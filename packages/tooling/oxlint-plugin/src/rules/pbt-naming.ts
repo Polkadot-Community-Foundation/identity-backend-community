@@ -6,14 +6,11 @@ export type Options = []
 export type MessageIds =
   | 'invalidSegments'
   | 'invalidScopeSymbol'
+  | 'incompleteScope'
   | 'emptyDomain'
   | 'domainLeaksDAMP'
   | 'invalidPredicateSymbol'
-
-// Format: [Symbol][Scope]_[Domain]_[Symbol][Predicate]
-// ∀x_DecodeEncode_=x     — "for all x, encode-decode equals x"
-// ≤ab_Sort_≤fg           — "ordered input produces ordered output"
-// →Shipped_Cancel_⊥      — "shipped implies cancellation is impossible"
+  | 'incompletePredicate'
 
 const SCOPE_SYMBOLS = new Set(['∀', '∃', '→', '¬', '≤', '≥'])
 const PREDICATE_SYMBOLS = new Set([
@@ -33,36 +30,51 @@ const PREDICATE_SYMBOLS = new Set([
   '⊥',
 ])
 
+const NULLARY_PREDICATE_SYMBOLS = new Set(['⊥'])
+
 const PASCAL_CASE = /^[A-Z][a-z][a-zA-Z0-9]*$/
+const DAMP_WORDS = /When|Should|Given|Then|Otherwise|After|Before/
 
 export const pbtNaming = defineRule({
   meta: {
     type: 'suggestion',
     docs: {
-      description: 'Enforce mathematical notation naming for property-based tests (it.prop / it.effect.prop). ' +
-        'Format: [Symbol][Scope]_[Domain]_[Symbol][Predicate] ' +
-        '(e.g., ∀x_DecodeEncode_=x, →Shipped_Cancel_⊥)',
+      description:
+        'Enforce a complete formal-specification name for property-based tests (it.prop / it.effect.prop). ' +
+        'Format: [ScopeSymbol][binder]_[Domain]_[PredicateSymbol][operand] ' +
+        '(e.g., ∀x_DecodeEncode_=x, ∀l_Filter_⊆Input, →Shipped_Cancel_⊥Allowed). ' +
+        'Both the quantifier and the predicate must carry an operand — a bare symbol specifies nothing.',
     },
     schema: [],
     messages: {
       invalidSegments: 'Expected: exactly 2 underscores in PBT name ([Scope]_[Domain]_[Predicate]). ' +
         'Actual: name "{{actual}}" has {{count}} separator(s). ' +
         "If this isn't a universal invariant, delete the test. " +
-        'Otherwise use format [Symbol][Scope]_[Domain]_[Symbol][Predicate] (e.g., ∀x_DecodeEncode_=x).',
-      invalidScopeSymbol: 'Expected: scope symbol (∀ ∃ → ¬ ≤ ≥) at start of name. ' +
-        'Actual: name "{{actual}}" starts with "{{firstChar}}". ' +
+        'Otherwise use format [ScopeSymbol][binder]_[Domain]_[PredicateSymbol][operand] (e.g., ∀x_DecodeEncode_=x).',
+      invalidScopeSymbol: 'Expected: a quantifier symbol (∀ ∃ → ¬ ≤ ≥) at the start of "{{actual}}". ' +
+        'Actual: it starts with "{{firstChar}}". ' +
         "If this isn't a universal invariant, delete the test. " +
-        'Otherwise prefix with a scope symbol, e.g., ∀, ∃, →, ¬, ≤, ≥.',
-      emptyDomain: 'Expected: non-empty PascalCase domain between the two underscores in "{{actual}}". ' +
+        'Otherwise quantify the input: ∀ (for all), ∃ (there exists), → (implies), ¬, ≤, ≥.',
+      incompleteScope: 'Expected: a bound variable after the quantifier "{{symbol}}" in scope segment "{{scope}}" ' +
+        '(e.g., ∀x, ∀order, ∃e, →Shipped). ' +
+        'A property quantifies over a named input drawn from a generator; name it. ' +
+        'A lone quantifier binds nothing and specifies no domain.',
+      emptyDomain: 'Expected: a non-empty PascalCase domain between the two underscores in "{{actual}}". ' +
         "If this isn't a universal invariant, delete the test. " +
-        'Otherwise add the domain concept, e.g., ∀x_DecodeEncode_=x.',
-      domainLeaksDAMP: 'Expected: invariant domain without scenario language. ' +
-        'Actual: domain "{{domain}}" contains "{{word}}" — this describes one case, not a universal law. ' +
+        'Otherwise name the thing under test, e.g., ∀x_DecodeEncode_=x.',
+      domainLeaksDAMP: 'Expected: an invariant domain, not scenario language. ' +
+        'Actual: domain "{{domain}}" contains "{{word}}" — that describes one case, not a universal law. ' +
         'Delete this test. It is not a property. Find the actual invariant and write that instead.',
-      invalidPredicateSymbol: 'Expected: predicate symbol (≡ ≠ = ≤ ≥ ∈ ⊆ → ∘ ∩ ∪ ⊥) at start of last segment. ' +
-        'Actual: name "{{actual}}" ends with "{{firstChar}}". ' +
+      invalidPredicateSymbol:
+        'Expected: a relation symbol (≡ ≠ = ≤ ≥ ∈ ⊆ ⊇ → ¬ ∘ ∩ ∪ ⊥) starting the last segment of "{{actual}}". ' +
+        'Actual: it ends with "{{firstChar}}". ' +
         "If this isn't a universal invariant, delete the test. " +
-        'Otherwise use a predicate symbol, e.g., =, ≡, ≠, ≤, ∈, ⊆, ⊥.',
+        'Otherwise relate the output: = / ≡ (roundtrip or oracle), ⊆ / ∈ (invariant), ≠ (distinctness), ⊥ (impossibility).',
+      incompletePredicate:
+        'Expected: an operand after the relation symbol "{{symbol}}" in predicate "{{predicate}}", ' +
+        'naming what the output is related to: =x / ≡Oracle (roundtrip or reference), ⊆Input / ∈Ignored (invariant), ' +
+        '≠Zero (distinctness), ⊥Cancellable (impossibility — name the outcome that cannot occur). ' +
+        'A bare symbol relates the output to nothing and so asserts no property.',
     },
   },
   create(context: Context) {
@@ -158,6 +170,15 @@ export const pbtNaming = defineRule({
           return
         }
 
+        if (scopeSegment.slice(1).length === 0) {
+          context.report({
+            node: node.arguments[0]!,
+            messageId: 'incompleteScope',
+            data: { symbol: scopeSymbol, scope: scopeSegment },
+          })
+          return
+        }
+
         if (!PASCAL_CASE.test(domainSegment)) {
           context.report({
             node: node.arguments[0]!,
@@ -167,7 +188,7 @@ export const pbtNaming = defineRule({
           return
         }
 
-        const dampMatch = /When|Should/.exec(domainSegment)
+        const dampMatch = DAMP_WORDS.exec(domainSegment)
         if (dampMatch) {
           context.report({
             node: node.arguments[0]!,
@@ -183,6 +204,15 @@ export const pbtNaming = defineRule({
             node: node.arguments[0]!,
             messageId: 'invalidPredicateSymbol',
             data: { actual: testName, firstChar: predicateSymbol },
+          })
+          return
+        }
+
+        if (!NULLARY_PREDICATE_SYMBOLS.has(predicateSymbol) && predicateSegment.slice(1).length === 0) {
+          context.report({
+            node: node.arguments[0]!,
+            messageId: 'incompletePredicate',
+            data: { symbol: predicateSymbol, predicate: predicateSegment },
           })
           return
         }

@@ -58,10 +58,7 @@ export interface CommonOpts<L extends LockConfig> {
 
 // @public (undocumented)
 export const Daemon: {
-    readonly poll: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
-        readonly work: Effect.Effect<A, E, R>;
-        readonly interval: Duration.DurationInput;
-    }) => Worker_2<E, R, L>;
+    readonly poll: <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>) => Worker_2<E, R, L>;
     readonly stream: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
         readonly stream: Stream.Stream<A, E, R>;
     }) => Worker_2<E, R, L>;
@@ -256,17 +253,25 @@ export const oneForAll: <E, R, L extends LockConfig = LockConfig>(opts: Supervis
 export const oneForOne: <E, R, L extends LockConfig = LockConfig>(opts: SupervisorOpts<E, R, L>) => Supervisor<E, R, L>;
 
 // @public (undocumented)
-export const poll: <A, E, R, L extends LockConfig>(opts: CommonOpts<L> & {
-    readonly work: Effect.Effect<A, E, R>;
-    readonly interval: Duration.DurationInput;
-}) => Worker_2<E, R, L>;
+export const poll: <A, E, R, L extends LockConfig>(opts: PollOpts<A, E, R, L>) => Worker_2<E, R, L>;
 
 // @public (undocumented)
 export type PollLoop<E, R> = {
     readonly _tag: 'Poll';
-    readonly work: Effect.Effect<void, E, R>;
+    readonly gate: Effect.Effect<Option_2.Option<Effect.Effect<void, E, R>>, E, R>;
     readonly interval: Duration.DurationInput;
 };
+
+// @public (undocumented)
+export type PollOpts<A, E, R, L extends LockConfig> = CommonOpts<L> & {
+    readonly interval: Duration.DurationInput;
+} & ({
+    readonly prereq?: undefined;
+    readonly work: Effect.Effect<A, E, R>;
+} | {
+    readonly prereq: Effect.Effect<Option_2.Option<A>, E, R>;
+    readonly work: (data: A) => Effect.Effect<void, E, R>;
+});
 
 // @public (undocumented)
 export interface ReporterPolicyHooks {
