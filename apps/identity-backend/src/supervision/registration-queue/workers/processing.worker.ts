@@ -21,7 +21,9 @@ import {
 } from '#root/username-registration/registration-queue/store.js'
 import { getAllocatedDigits } from '#root/username-registration/store.js'
 import { Daemon } from '@identity-backend/effect-daemon-spec'
-import { Context, Duration, Effect, Either, HashSet, Metric, Random, Runtime, Schedule } from 'effect'
+import { Context, Duration, Effect, Either, HashSet, Metric, Option, Random, Runtime, Schedule } from 'effect'
+
+type QueuedEntries = Effect.Effect.Success<ReturnType<typeof findQueuedEntries>>
 
 export class ProcessingWorkerRuntimeConfig extends Context.Reference<ProcessingWorkerRuntimeConfig>()(
   'ProcessingWorkerRuntimeConfig',
@@ -82,7 +84,7 @@ export const makeRegistrationQueueWorker = Effect.gen(function*() {
   const priorityConfig = yield* QueuePriorityConfig
   const { network } = yield* RegistrationQueueConfig
 
-  const work = Effect.gen(function*() {
+  const prereq = Effect.gen(function*() {
     yield* Metric.increment(queueCycleTotal)
 
     const queued = yield* findQueuedEntries().pipe(
@@ -91,77 +93,84 @@ export const makeRegistrationQueueWorker = Effect.gen(function*() {
     )
     yield* Metric.set(queueDepth, queued.length)
 
-    if (queued.length === 0) return
-
-    const selected = selectUsersForPriorityCycle(queued, priorityConfig)
-    if (selected.length === 0) return
-
-    const usernames = [...HashSet.fromIterable(selected.map((s) => s.entry.username))]
-    const allocated = yield* getAllocatedDigits(usernames, network)
-
-    const digitAssignments = yield* Effect.all(
-      selected.map((s) =>
-        Effect.gen(function*() {
-          const availableDigits = availableDigitsForUsername(allocated, s.entry.username)
-          const digit = yield* selectDigits({
-            availableDigits,
-            baseUsername: s.entry.username,
-          }).pipe(
-            Effect.catchTag('NoDigitsAvailableError', () => Effect.succeed(null)),
-            Effect.catchTag('PreferredDigitsTakenError', () => Effect.succeed(null)),
-          )
-          if (digit === null) return null
-          return {
-            entryId: s.entry.id,
-            username: s.entry.username,
-            candidateAccountId: s.entry.candidateAccountId,
-            digit,
-          }
-        })
-      ),
-    ).pipe(Effect.map((results) => results.filter((r): r is NonNullable<typeof r> => r !== null)))
-
-    if (digitAssignments.length === 0) return
-
-    const { values, keyMap } = buildReservationValues(digitAssignments, network)
-
-    const registeredIds: QueueEntryId[] = yield* Effect.tryPromise(() => {
-      const runP = Runtime.runPromise(runtime)
-      return db.transaction(async (tx) => {
-        const either = await runP(
-          Effect.gen(function*() {
-            const rows = yield* insertReservedUsernames(values).pipe(
-              Effect.provideService(DB, tx),
-            )
-            const ids = mapToQueueIds(rows, keyMap)
-            if (ids.length > 0) {
-              yield* deleteQueuedEntriesByIds(ids).pipe(Effect.provideService(DB, tx))
-            }
-            return ids
-          }).pipe(
-            Effect.retry(
-              Schedule.exponential(Duration.millis(200), 2).pipe(Schedule.compose(Schedule.recurs(3))),
-            ),
-            Effect.either,
-          ),
-        )
-        if (Either.isLeft(either)) throw either.left
-        return either.right
-      })
-    }).pipe(Effect.orDie)
-
-    yield* Effect.annotateCurrentSpan({
-      'app.queue.entries_queried': queued.length,
-      'app.queue.entries_selected': selected.length,
-      'app.queue.entries_registered': registeredIds.length,
-    })
+    return Option.liftPredicate(queued, (found) => found.length > 0)
   }).pipe(
     Effect.provideService(DB, db),
     Effect.provideService(Random.Random, rand),
   )
 
+  const work = (queued: QueuedEntries) =>
+    Effect.gen(function*() {
+      const selected = selectUsersForPriorityCycle(queued, priorityConfig)
+      if (selected.length === 0) return
+
+      const usernames = [...HashSet.fromIterable(selected.map((s) => s.entry.username))]
+      const allocated = yield* getAllocatedDigits(usernames, network)
+
+      const digitAssignments = yield* Effect.all(
+        selected.map((s) =>
+          Effect.gen(function*() {
+            const availableDigits = availableDigitsForUsername(allocated, s.entry.username)
+            const digit = yield* selectDigits({
+              availableDigits,
+              baseUsername: s.entry.username,
+            }).pipe(
+              Effect.catchTag('NoDigitsAvailableError', () => Effect.succeed(null)),
+              Effect.catchTag('PreferredDigitsTakenError', () => Effect.succeed(null)),
+            )
+            if (digit === null) return null
+            return {
+              entryId: s.entry.id,
+              username: s.entry.username,
+              candidateAccountId: s.entry.candidateAccountId,
+              digit,
+            }
+          })
+        ),
+      ).pipe(Effect.map((results) => results.filter((r): r is NonNullable<typeof r> => r !== null)))
+
+      if (digitAssignments.length === 0) return
+
+      const { values, keyMap } = buildReservationValues(digitAssignments, network)
+
+      const registeredIds: QueueEntryId[] = yield* Effect.tryPromise(() => {
+        const runP = Runtime.runPromise(runtime)
+        return db.transaction(async (tx) => {
+          const either = await runP(
+            Effect.gen(function*() {
+              const rows = yield* insertReservedUsernames(values).pipe(
+                Effect.provideService(DB, tx),
+              )
+              const ids = mapToQueueIds(rows, keyMap)
+              if (ids.length > 0) {
+                yield* deleteQueuedEntriesByIds(ids).pipe(Effect.provideService(DB, tx))
+              }
+              return ids
+            }).pipe(
+              Effect.retry(
+                Schedule.exponential(Duration.millis(200), 2).pipe(Schedule.compose(Schedule.recurs(3))),
+              ),
+              Effect.either,
+            ),
+          )
+          if (Either.isLeft(either)) throw either.left
+          return either.right
+        })
+      }).pipe(Effect.orDie)
+
+      yield* Effect.annotateCurrentSpan({
+        'app.queue.entries_queried': queued.length,
+        'app.queue.entries_selected': selected.length,
+        'app.queue.entries_registered': registeredIds.length,
+      })
+    }).pipe(
+      Effect.provideService(DB, db),
+      Effect.provideService(Random.Random, rand),
+    )
+
   return Daemon.poll({
     name: 'registration-queue',
+    prereq,
     work,
     interval: config.pollInterval,
     tick: {

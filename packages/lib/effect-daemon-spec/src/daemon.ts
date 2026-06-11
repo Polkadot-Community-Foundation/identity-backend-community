@@ -1,4 +1,4 @@
-import { Effect, Stream } from 'effect'
+import { Effect, Option, Stream } from 'effect'
 import type { Duration } from 'effect'
 import type { ChildPolicyConfig, LockConfig, TickPolicyConfig, TickPolicyHooks, Worker } from './daemon-spec.js'
 import { WorkerTypeId } from './daemon-spec.js'
@@ -24,12 +24,28 @@ const make = <E, R, L extends LockConfig>(
   lock: common.lock,
 })
 
+export type PollOpts<A, E, R, L extends LockConfig> =
+  & CommonOpts<L>
+  & { readonly interval: Duration.DurationInput }
+  & (
+    | { readonly prereq?: undefined; readonly work: Effect.Effect<A, E, R> }
+    | {
+      readonly prereq: Effect.Effect<Option.Option<A>, E, R>
+      readonly work: (data: A) => Effect.Effect<void, E, R>
+    }
+  )
+
 export const poll = <A, E, R, L extends LockConfig>(
-  opts: CommonOpts<L> & {
-    readonly work: Effect.Effect<A, E, R>
-    readonly interval: Duration.DurationInput
-  },
-): Worker<E, R, L> => make(opts, { _tag: 'Poll', work: Effect.asVoid(opts.work), interval: opts.interval })
+  opts: PollOpts<A, E, R, L>,
+): Worker<E, R, L> => {
+  if (typeof opts.prereq === 'undefined') {
+    const gate = Effect.succeed(Option.some(Effect.asVoid(opts.work)))
+    return make(opts, { _tag: 'Poll', gate, interval: opts.interval })
+  }
+  const { prereq, work } = opts
+  const gate = Effect.map(prereq, Option.map((data) => work(data)))
+  return make(opts, { _tag: 'Poll', gate, interval: opts.interval })
+}
 
 export const stream = <A, E, R, L extends LockConfig>(
   opts: CommonOpts<L> & {

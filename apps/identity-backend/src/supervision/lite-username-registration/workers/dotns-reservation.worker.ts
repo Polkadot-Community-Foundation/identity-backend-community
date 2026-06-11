@@ -16,7 +16,7 @@ import { DB } from '@identity-backend/db'
 import { Daemon } from '@identity-backend/effect-daemon-spec'
 import { fromObservable } from '@identity-backend/rx-effect'
 import { and, eq } from 'drizzle-orm'
-import { Array, Context, Duration, Effect, Either, Metric, pipe, Ref, Schedule, Stream } from 'effect'
+import { Array, Context, Duration, Effect, Either, Metric, Option, pipe, Ref, Schedule, Stream } from 'effect'
 import { Binary, type PolkadotSigner, type TxFinalized } from 'polkadot-api'
 
 type AhUtilityItemFailed = ReturnType<AhItemFailedEvFilter>[number]
@@ -414,11 +414,8 @@ export const make = Effect.gen(function*() {
 
   const attesterAhSigner = createAhSigner(config.keypair)
 
-  const work = Effect.gen(function*() {
-    // Disable gate — replaces the previous `layerSubmitDotnsReservationsDaemonConditional`
-    // in main.ts. The supervisor runs unconditionally; the work function returns early
-    // when Asset Hub dotNS gateway is disabled.
-    if (!config.dotnsGatewayEnabled) return
+  const prereq = Effect.gen(function*() {
+    if (!config.dotnsGatewayEnabled) return Option.none()
 
     const batchSize = yield* Ref.get(batchSizeRef)
     const candidateRows = yield* pipe(
@@ -443,211 +440,213 @@ export const make = Effect.gen(function*() {
       ),
     )
 
-    yield* Effect.annotateLogsScoped({
-      usernames: Array.map(candidateRows, ({ username }) => username),
-    })
+    return Option.liftPredicate(candidateRows, (found) => found.length > 0)
+  }).pipe(Effect.orDie)
 
-    if (candidateRows.length === 0) {
-      return
-    }
-
-    const { ready: readyRows, missingFields: missingFieldRows } = partitionReady(candidateRows)
-
-    if (missingFieldRows.length > 0) {
-      // Defensive: rows in ah_status='RESERVED' should always have the AH fields populated
-      // by the register route. Log loudly but do not auto-FAIL — operator inspection wanted.
-      yield* Effect.logError('dotNS RESERVED rows missing AH fields; skipping')
-        .pipe(
-          Effect.annotateLogs({
-            missingCount: missingFieldRows.length,
-            'error.category': 'data-integrity',
-            'error.subcategory': 'dotns-reservation',
-            'error.type': 'MISSING_AH_FIELDS',
-          }),
-        )
-    }
-
-    const nowSeconds = Math.floor(Date.now() / 1000)
-    const { maxValiditySeconds, maxFutureSkewSeconds } = dotnsGateway.chainConstants
-    const submitDeadline = maxValiditySeconds - config.signedAtSafetyMarginSeconds
-    const { fresh: freshRows, expired: expiredRows, future: futureRows } = partitionByFreshness(
-      readyRows,
-      nowSeconds,
-      submitDeadline,
-      maxFutureSkewSeconds,
-    )
-
-    if (expiredRows.length > 0) {
-      yield* Effect.logWarning('Dropping rows with stale dotNS signatures')
-        .pipe(
-          Effect.annotateLogs({
-            expiredCount: expiredRows.length,
-            'error.category': 'blockchain',
-            'error.subcategory': 'dotns-reservation',
-            'error.type': 'SIGNATURE_EXPIRED',
-          }),
-        )
-      yield* markStaleRowsFailed(expiredRows)
-    }
-
-    if (futureRows.length > 0) {
-      yield* Effect.logError('Dropping rows with future-dated dotNS signatures')
-        .pipe(
-          Effect.annotateLogs({
-            futureCount: futureRows.length,
-            'error.category': 'blockchain',
-            'error.subcategory': 'dotns-reservation',
-            'error.type': 'SIGNATURE_FROM_FUTURE',
-          }),
-        )
-      yield* markStaleRowsFailed(futureRows)
-    }
-
-    if (freshRows.length === 0) {
-      return
-    }
-
-    const success = yield* Ref.make(false)
-    yield* operationsTotalCounter(Effect.succeed(freshRows.length))
-    yield* Effect.addFinalizer(() =>
-      Effect.gen(function*() {
-        if (!(yield* Ref.get(success))) {
-          yield* operationsFailuresCounter(Effect.succeed(freshRows.length))
-        }
+  const work = (candidateRows: readonly IndividualityUsername[]) =>
+    Effect.gen(function*() {
+      yield* Effect.annotateLogsScoped({
+        usernames: Array.map(candidateRows, ({ username }) => username),
       })
-    )
 
-    yield* Effect.logInfo('Submit dotNS Reservations Job Started')
+      const { ready: readyRows, missingFields: missingFieldRows } = partitionReady(candidateRows)
 
-    const reserveParams = Array.map(
-      freshRows,
-      ({
-        candidateAccountId,
-        username,
-        digits,
-        candidateSignatureDotns,
-        identifierKey,
-        reservedUsername,
-        signedAt,
-      }) => ({
-        candidate: candidateAccountId,
-        candidateSignature: Binary.fromHex(candidateSignatureDotns),
-        liteLabel: `${username}.${digits}`,
-        chatKey: Binary.fromHex(identifierKey),
-        reservedBaseLabel: reservedUsername ?? undefined,
-        signedAt: BigInt(Math.floor(signedAt.getTime() / 1000)),
-      }),
-    )
+      if (missingFieldRows.length > 0) {
+        // Defensive: rows in ah_status='RESERVED' should always have the AH fields populated
+        // by the register route. Log loudly but do not auto-FAIL — operator inspection wanted.
+        yield* Effect.logError('dotNS RESERVED rows missing AH fields; skipping')
+          .pipe(
+            Effect.annotateLogs({
+              missingCount: missingFieldRows.length,
+              'error.category': 'data-integrity',
+              'error.subcategory': 'dotns-reservation',
+              'error.type': 'MISSING_AH_FIELDS',
+            }),
+          )
+      }
 
-    const tx = yield* config.proxyDelegationEnabled
-      ? Effect.gen(function*() {
-        const baseTx = yield* dotnsGateway.reserveNames(reserveParams)
-        const ss58Address = yield* utilityAPI.computeSs58Address(config.attesterPublicKey)
-        return yield* dotnsGateway.proxy({
-          real: ss58Address,
-          forceProxyType: 'Any',
-          call: baseTx.decodedCall,
+      const nowSeconds = Math.floor(Date.now() / 1000)
+      const { maxValiditySeconds, maxFutureSkewSeconds } = dotnsGateway.chainConstants
+      const submitDeadline = maxValiditySeconds - config.signedAtSafetyMarginSeconds
+      const { fresh: freshRows, expired: expiredRows, future: futureRows } = partitionByFreshness(
+        readyRows,
+        nowSeconds,
+        submitDeadline,
+        maxFutureSkewSeconds,
+      )
+
+      if (expiredRows.length > 0) {
+        yield* Effect.logWarning('Dropping rows with stale dotNS signatures')
+          .pipe(
+            Effect.annotateLogs({
+              expiredCount: expiredRows.length,
+              'error.category': 'blockchain',
+              'error.subcategory': 'dotns-reservation',
+              'error.type': 'SIGNATURE_EXPIRED',
+            }),
+          )
+        yield* markStaleRowsFailed(expiredRows)
+      }
+
+      if (futureRows.length > 0) {
+        yield* Effect.logError('Dropping rows with future-dated dotNS signatures')
+          .pipe(
+            Effect.annotateLogs({
+              futureCount: futureRows.length,
+              'error.category': 'blockchain',
+              'error.subcategory': 'dotns-reservation',
+              'error.type': 'SIGNATURE_FROM_FUTURE',
+            }),
+          )
+        yield* markStaleRowsFailed(futureRows)
+      }
+
+      if (freshRows.length === 0) {
+        return
+      }
+
+      const success = yield* Ref.make(false)
+      yield* operationsTotalCounter(Effect.succeed(freshRows.length))
+      yield* Effect.addFinalizer(() =>
+        Effect.gen(function*() {
+          if (!(yield* Ref.get(success))) {
+            yield* operationsFailuresCounter(Effect.succeed(freshRows.length))
+          }
         })
+      )
+
+      yield* Effect.logInfo('Submit dotNS Reservations Job Started')
+
+      const reserveParams = Array.map(
+        freshRows,
+        ({
+          candidateAccountId,
+          username,
+          digits,
+          candidateSignatureDotns,
+          identifierKey,
+          reservedUsername,
+          signedAt,
+        }) => ({
+          candidate: candidateAccountId,
+          candidateSignature: Binary.fromHex(candidateSignatureDotns),
+          liteLabel: `${username}.${digits}`,
+          chatKey: Binary.fromHex(identifierKey),
+          reservedBaseLabel: reservedUsername ?? undefined,
+          signedAt: BigInt(Math.floor(signedAt.getTime() / 1000)),
+        }),
+      )
+
+      const tx = yield* config.proxyDelegationEnabled
+        ? Effect.gen(function*() {
+          const baseTx = yield* dotnsGateway.reserveNames(reserveParams)
+          const ss58Address = yield* utilityAPI.computeSs58Address(config.attesterPublicKey)
+          return yield* dotnsGateway.proxy({
+            real: ss58Address,
+            forceProxyType: 'Any',
+            call: baseTx.decodedCall,
+          })
+        })
+        : dotnsGateway.reserveNames(reserveParams)
+
+      yield* Effect.logDebug('Reserve dotNS names extrinsic started')
+
+      const submission = yield* Effect.either(pipe(
+        Effect.sync(() => tx.signSubmitAndWatch(attesterAhSigner)),
+        Effect.map(fromObservable((err) => new TransactionSubmitError({ cause: err }))),
+        Effect.andThen((stream) =>
+          pipe(
+            stream,
+            Stream.tap(logTxEvent),
+            watchThroughReorgs,
+            runTxFinalized({ timeout: config.submitTimeout }),
+          )
+        ),
+      ))
+      yield* recordBatchOutcome(outcomeFromTxResult(submission)).pipe(
+        Effect.provideService(RecordBatchOutcomeDeps, batchBackoff),
+      )
+
+      if (Either.isLeft(submission)) {
+        yield* Effect.logWarning('Reserve dotNS names extrinsic failed', { 'error.type': submission.left._tag })
+        return
+      }
+      if (!submission.right.ok) {
+        return
+      }
+
+      const txResult = submission.right
+      yield* Effect.annotateLogsScoped({
+        blockHash: txResult.block.hash,
+        blockNumber: txResult.block.number,
+        blockIndex: txResult.block.index,
+        txHash: txResult.txHash,
       })
-      : dotnsGateway.reserveNames(reserveParams)
 
-    yield* Effect.logDebug('Reserve dotNS names extrinsic started')
+      yield* Effect.logDebug('Reserve dotNS names extrinsic completed')
 
-    const submission = yield* Effect.either(pipe(
-      Effect.sync(() => tx.signSubmitAndWatch(attesterAhSigner)),
-      Effect.map(fromObservable((err) => new TransactionSubmitError({ cause: err }))),
-      Effect.andThen((stream) =>
-        pipe(
-          stream,
-          Stream.tap(logTxEvent),
-          watchThroughReorgs,
-          runTxFinalized({ timeout: config.submitTimeout }),
+      const processedEvents = yield* processEvents(txResult.events, dotnsGateway)
+      yield* Ref.set(success, true)
+      yield* operationsFailuresCounter(
+        Effect.succeed(
+          processedEvents.terminalErrors.length + processedEvents.retryableItems.length,
+        ),
+      )
+
+      yield* Effect.logDebug('Committing reserve dotNS names results to database')
+
+      if (processedEvents.terminalErrors.length > 0) {
+        yield* Effect.forEach(
+          processedEvents.terminalErrors,
+          ({ itemIndex, reason }) =>
+            Effect.logWarning('Terminal dotNS reservation failure').pipe(
+              Effect.annotateLogs({
+                'username.lite': `${freshRows[itemIndex]!.username}.${freshRows[itemIndex]!.digits}`,
+                'error.category': 'blockchain',
+                'error.subcategory': 'dotns-reservation',
+                'error.type': reason,
+                'error.retryable': false,
+              }),
+            ),
+          { discard: true },
         )
-      ),
-    ))
-    yield* recordBatchOutcome(outcomeFromTxResult(submission)).pipe(
-      Effect.provideService(RecordBatchOutcomeDeps, batchBackoff),
-    )
+      }
 
-    if (Either.isLeft(submission)) {
-      yield* Effect.logWarning('Reserve dotNS names extrinsic failed', { 'error.type': submission.left._tag })
-      return
-    }
-    if (!submission.right.ok) {
-      return
-    }
+      if (processedEvents.retryableItems.length > 0) {
+        yield* Effect.forEach(
+          processedEvents.retryableItems,
+          ({ itemIndex }) =>
+            Effect.logWarning('dotNS reservation will be retried').pipe(
+              Effect.annotateLogs({
+                'username.lite': `${freshRows[itemIndex]!.username}.${freshRows[itemIndex]!.digits}`,
+                'error.category': 'blockchain',
+                'error.subcategory': 'dotns-reservation',
+                'error.retryable': true,
+              }),
+            ),
+          { discard: true },
+        )
+      }
 
-    const txResult = submission.right
-    yield* Effect.annotateLogsScoped({
-      blockHash: txResult.block.hash,
-      blockNumber: txResult.block.number,
-      blockIndex: txResult.block.index,
-      txHash: txResult.txHash,
-    })
+      yield* updateDB({
+        ...txResult,
+        candidateRows: freshRows,
+        processedEvents,
+        now: new Date(),
+      })
 
-    yield* Effect.logDebug('Reserve dotNS names extrinsic completed')
-
-    const processedEvents = yield* processEvents(txResult.events, dotnsGateway)
-    yield* Ref.set(success, true)
-    yield* operationsFailuresCounter(
-      Effect.succeed(
-        processedEvents.terminalErrors.length + processedEvents.retryableItems.length,
-      ),
-    )
-
-    yield* Effect.logDebug('Committing reserve dotNS names results to database')
-
-    if (processedEvents.terminalErrors.length > 0) {
-      yield* Effect.forEach(
-        processedEvents.terminalErrors,
-        ({ itemIndex, reason }) =>
-          Effect.logWarning('Terminal dotNS reservation failure').pipe(
-            Effect.annotateLogs({
-              'username.lite': `${freshRows[itemIndex]!.username}.${freshRows[itemIndex]!.digits}`,
-              'error.category': 'blockchain',
-              'error.subcategory': 'dotns-reservation',
-              'error.type': reason,
-              'error.retryable': false,
-            }),
-          ),
-        { discard: true },
-      )
-    }
-
-    if (processedEvents.retryableItems.length > 0) {
-      yield* Effect.forEach(
-        processedEvents.retryableItems,
-        ({ itemIndex }) =>
-          Effect.logWarning('dotNS reservation will be retried').pipe(
-            Effect.annotateLogs({
-              'username.lite': `${freshRows[itemIndex]!.username}.${freshRows[itemIndex]!.digits}`,
-              'error.category': 'blockchain',
-              'error.subcategory': 'dotns-reservation',
-              'error.retryable': true,
-            }),
-          ),
-        { discard: true },
-      )
-    }
-
-    yield* updateDB({
-      ...txResult,
-      candidateRows: freshRows,
-      processedEvents,
-      now: new Date(),
-    })
-
-    yield* Effect.logDebug('Committed reserve dotNS names results to database')
-    yield* Effect.log('Reserve dotNS names job completed')
-  })
-
-  return Daemon.poll({
-    name: 'dotns-reservation',
-    work: work.pipe(
+      yield* Effect.logDebug('Committed reserve dotNS names results to database')
+      yield* Effect.log('Reserve dotNS names job completed')
+    }).pipe(
       Effect.provideService(DB, db),
       Effect.scoped,
       Effect.orDie,
-    ),
+    )
+
+  return Daemon.poll({
+    name: 'dotns-reservation',
+    prereq,
+    work,
     interval: config.pollInterval,
     tick: {
       spanName: 'jobs.dotns_gateway.reserve',

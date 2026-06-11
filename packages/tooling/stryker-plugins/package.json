@@ -1,0 +1,67 @@
+{
+  "name": "@identity-backend/stryker-plugins",
+  "private": true,
+  "license": "MIT",
+  "version": "0.0.1",
+  "type": "module",
+  "description": "Stryker plugins for this workspace. Each plugin is a subpath export. effect-schema-ignorer: skips equivalent mutants on Effect Schema declarations (brand Symbol.for descriptions, TaggedClass/TaggedError _tag and field schemas).",
+  "files": [
+    "dist"
+  ],
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/mod.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./effect-schema-ignorer": {
+      "@identity-backend/source": "./src/effect-schema-ignorer/index.ts",
+      "default": "./dist/effect-schema-ignorer.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "scripts": {
+    "build": "tsdown",
+    "clean": "rimraf dist",
+    "typecheck": "tsgo --noEmit --incremental",
+    "format": "dprint fmt",
+    "test": "backend run --cmd 'vitest run'",
+    "mutation": "backend run --cmd 'stryker run --incremental' --stryker",
+    "mutation:full": "backend run --guard --cmd 'stryker run'",
+    "test:run": "vitest run --coverage",
+    "test:types": "tstyche",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "@stryker-mutator/api": "^9.6.1"
+  },
+  "devDependencies": {
+    "@babel/types": "^7.29.0",
+    "@effect/vitest": "catalog:",
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/testing": "workspace:^",
+    "@identity-backend/vitest-config": "workspace:^",
+    "@stryker-mutator/core": "^9.6.1",
+    "@stryker-mutator/typescript-checker": "^9.6.1",
+    "@stryker-mutator/vitest-runner": "^9.6.1",
+    "@types/node": "catalog:",
+    "@vitest/coverage-v8": "catalog:",
+    "effect": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "^7.1.0",
+    "typescript": "^6.0.3",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "typescript": ">=5.0.0"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./effect-schema-ignorer": "./dist/effect-schema-ignorer.mjs",
+      "./package.json": "./package.json"
+    }
+  },
+  "inlinedDependencies": {
+    "effect": "3.21.2"
+  }
+}

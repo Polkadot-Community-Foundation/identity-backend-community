@@ -1,4 +1,4 @@
-import { Cause, Effect, Fiber, Match, Metric, Schedule, Scope, Stream } from 'effect'
+import { Cause, Effect, Fiber, Match, Metric, Option, Schedule, Scope, Stream } from 'effect'
 import type { DaemonHealth } from '../daemon-health.js'
 import { healthStateGauge } from '../daemon-metrics.js'
 import type {
@@ -48,7 +48,7 @@ const applyInnerRetry = (hooks: TickPolicyHooks) => {
 const buildPollTick = <E, R>(
   worker: Worker<E, R>,
   health: DaemonHealth,
-  workEffect: Effect.Effect<void, E, R>,
+  gate: Effect.Effect<Option.Option<Effect.Effect<void, E, R>>, E, R>,
 ): Effect.Effect<void, E | Cause.TimeoutException, R> => {
   const { tick, tickHooks } = worker
   const spanName = tick.spanName ?? 'daemon.tick'
@@ -57,15 +57,18 @@ const buildPollTick = <E, R>(
   const withTimeout = applyTimeout(tick)
   const withInnerRetry = applyInnerRetry(tickHooks)
 
-  const gated = Effect.andThen(health.paused.await, workEffect)
+  const runWork = (work: Effect.Effect<void, E, R>): Effect.Effect<void, E, R> =>
+    work.pipe(withSpanAttrs, withDuration).pipe(
+      Effect.withSpan(spanName, { root: true, attributes: { 'daemon.name': worker.name } }),
+      Effect.withLogSpan(spanName),
+    )
+
+  const gated = Effect.andThen(health.paused.await, gate).pipe(
+    Effect.flatMap(Option.match({ onNone: () => Effect.void, onSome: runWork })),
+  )
   const timed = withTimeout(gated)
   const retried = withInnerRetry(timed)
-  const observed = retried.pipe(withSpanAttrs, withDuration)
-  const traced = observed.pipe(
-    Effect.withSpan(spanName, { root: true, attributes: { 'daemon.name': worker.name } }),
-    Effect.withLogSpan(spanName),
-  )
-  return traced.pipe(
+  return retried.pipe(
     Effect.tap(() =>
       Effect.zipRight(
         health.ready.open,
@@ -92,7 +95,7 @@ export const buildPollLoop = <E, R>(
   loop: PollLoop<E, R>,
   health: DaemonHealth,
 ): Effect.Effect<void, E | Cause.TimeoutException, R> => {
-  const tick = buildPollTick(worker, health, loop.work)
+  const tick = buildPollTick(worker, health, loop.gate)
   return Effect.repeat(tick, Schedule.spaced(loop.interval)).pipe(Effect.asVoid)
 }
 
@@ -114,14 +117,8 @@ export const buildStreamLoop = <E, R>(
         Stream.runDrain,
       ),
     )
-    const ready = applyTimeout(worker.tick)(health.ready.await).pipe(
-      Effect.as('ready' as const),
-    )
-    const completed = Fiber.join(fiber).pipe(
-      Effect.as('done' as const),
-    )
-    const winner = yield* Effect.raceFirst(ready, completed)
-    if (winner === 'done') return
+    const ready = applyTimeout(worker.tick)(health.ready.await)
+    yield* Effect.raceFirst(ready, Fiber.join(fiber))
     yield* Fiber.join(fiber)
   })
   const retried = applyInnerRetry(worker.tickHooks)(body)

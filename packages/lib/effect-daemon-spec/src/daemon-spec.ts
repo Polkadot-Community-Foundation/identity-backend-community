@@ -1,4 +1,4 @@
-import type { Cause, Duration, Effect, Metric, Schedule, Stream } from 'effect'
+import type { Cause, Duration, Effect, Metric, Option, Schedule, Stream } from 'effect'
 import { ChildPolicyConfig, IntensityConfig, LockPolicyConfig, TickPolicyConfig } from './daemon-policy.schema.js'
 import type { SupervisionPolicy } from './supervision-preset.js'
 
@@ -37,7 +37,7 @@ export interface ReporterPolicyHooks {
 
 export type PollLoop<E, R> = {
   readonly _tag: 'Poll'
-  readonly work: Effect.Effect<void, E, R>
+  readonly gate: Effect.Effect<Option.Option<Effect.Effect<void, E, R>>, E, R>
   readonly interval: Duration.DurationInput
 }
 

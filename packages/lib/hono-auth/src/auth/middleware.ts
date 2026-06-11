@@ -1,11 +1,19 @@
-import { Context, Effect, Match } from 'effect'
+import { Context, Effect, Either, Match } from 'effect'
 import type { MiddlewareHandler } from 'hono'
+import { AppAttestDispatchCommand, decideAppAttestDispatch } from '../app-attest/dispatch.workflow.js'
 import { decideAndroidDispatch } from './dispatch.js'
 
 export class AuthMiddlewareConfig extends Context.Tag('AuthMiddlewareConfig')<
   AuthMiddlewareConfig,
   { enforceAuth: boolean }
 >() {}
+
+const ASSERTION_HEADER_NAMES: Record<string, string> = {
+  payload: 'Auth-Payload',
+  keyId: 'Auth-iOS-KeyId',
+  challenge: 'Auth-Challenge',
+  clientId: 'Auth-ClientId',
+}
 
 export const makeAuthMiddleware = (
   // oxlint-disable-next-line typescript/no-explicit-any
@@ -71,9 +79,40 @@ export const makeAuthMiddleware = (
       )
     })
 
+    const appAttestDispatchMiddleware = createMiddleware(async (c, next) => {
+      const command = new AppAttestDispatchCommand({
+        iosPackage: c.req.header('Auth-iOS-Package'),
+        payload: c.req.header('Auth-Payload'),
+        keyId: c.req.header('Auth-iOS-KeyId'),
+        challenge: c.req.header('Auth-Challenge'),
+        clientId: c.req.header('Auth-ClientId'),
+      })
+
+      return Either.match(decideAppAttestDispatch(command), {
+        onLeft: (error) =>
+          Match.value(error).pipe(
+            Match.tag('IncompleteAssertion', ({ missing }) => {
+              const missingHeaders = missing.map((field) => ASSERTION_HEADER_NAMES[field] ?? field)
+              return c.json({
+                _tag: 'IncompleteAssertion',
+                error: `Missing required App Attest headers: ${missingHeaders.join(', ')}`,
+                missing: missingHeaders,
+              }, 401)
+            }),
+            Match.exhaustive,
+          ),
+        onRight: (decision) =>
+          Match.value(decision).pipe(
+            Match.tag('Skip', () => next()),
+            Match.tag('Verify', () => appAttestMiddleware(c, next)),
+            Match.exhaustive,
+          ),
+      })
+    })
+
     return HonoCombine.every(
       enforceAuthMiddleware,
       androidAttestationDispatchMiddleware,
-      HonoCombine.except((c) => c.req.header('Auth-iOS-Package') === undefined, appAttestMiddleware),
+      appAttestDispatchMiddleware,
     )
   })

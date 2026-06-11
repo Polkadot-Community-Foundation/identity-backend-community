@@ -1,5 +1,5 @@
 name: Setup Bun runtime
-description: Install Bun
+description: Install Bun with cache and retry fallback
 
 inputs:
   bun-version:
@@ -10,6 +10,69 @@ inputs:
 runs:
   using: composite
   steps:
-    - uses: oven-sh/setup-bun@v2
+    - name: Restore bun from cache
+      id: bun-cache
+      uses: actions/cache/restore@v4
+      with:
+        path: ~/.bun
+        key: ${{ runner.os }}-bun-${{ inputs.bun-version }}
+        restore-keys: |
+          ${{ runner.os }}-bun-${{ inputs.bun-version }}-
+          ${{ runner.os }}-bun-
+
+    - name: Verify cached bun
+      id: verify-bun
+      shell: bash
+      run: |
+        if [ -f "$HOME/.bun/bin/bun" ] && "$HOME/.bun/bin/bun" --version &>/dev/null; then
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+          echo "bun-ready=true" >> "$GITHUB_OUTPUT"
+          echo "bun restored from cache: $("$HOME/.bun/bin/bun" --version)"
+        fi
+
+    - name: Install Bun
+      if: steps.verify-bun.outputs.bun-ready != 'true'
+      uses: oven-sh/setup-bun@v2
+      continue-on-error: true
+      id: setup-bun
       with:
         bun-version: ${{ inputs.bun-version }}
+
+    - name: Fallback (direct download with retry)
+      if: steps.verify-bun.outputs.bun-ready != 'true' && (steps.setup-bun.outcome == 'failure' || steps.setup-bun.conclusion == 'failure')
+      shell: bash
+      run: |
+        if command -v bun &>/dev/null; then
+          echo "bun-ready=true" >> "$GITHUB_OUTPUT"
+          exit 0
+        fi
+
+        for attempt in 1 2 3; do
+          echo "Installing bun (attempt $attempt/3)..."
+          if curl -fsSL https://bun.sh/install | bash; then
+            break
+          fi
+          if [ "$attempt" -lt 3 ]; then
+            echo "bun install failed, retrying in 5s..."
+            sleep 5
+          fi
+        done
+
+        if [ -f "$HOME/.bun/bin/bun" ]; then
+          echo "$HOME/.bun/bin" >> "$GITHUB_PATH"
+        fi
+
+        if [ -f "$HOME/.bun/bin/bun" ] && "$HOME/.bun/bin/bun" --version &>/dev/null; then
+          echo "bun-ready=true" >> "$GITHUB_OUTPUT"
+          echo "bun version: $(bun --version)"
+        else
+          echo "ERROR: bun not available after 3 download attempts" >&2
+          exit 1
+        fi
+
+    - name: Cache bun binary (fresh install)
+      if: steps.verify-bun.outputs.bun-ready != 'true'
+      uses: actions/cache/save@v4
+      with:
+        path: ~/.bun
+        key: ${{ runner.os }}-bun-${{ inputs.bun-version }}-${{ github.run_id }}

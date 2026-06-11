@@ -1,5 +1,5 @@
 import { Daemon } from '@identity-backend/effect-daemon-spec'
-import { Context, Duration, Effect, Metric, Random, Schedule } from 'effect'
+import { Context, Duration, Effect, Metric, Option, Random, Schedule } from 'effect'
 
 import { type PlanckBalance, ZERO_PLANCK } from '#root/schema/balance.js'
 import {
@@ -10,6 +10,8 @@ import { QueuePriorityConfig } from '#root/username-registration/registration-qu
 import { priorityUpdatesForBalances } from '#root/username-registration/registration-queue/priority-group.js'
 import { findQueuedEntries, updatePriorityGroups } from '#root/username-registration/registration-queue/store.js'
 import { DB } from '@identity-backend/db'
+
+type QueuedEntries = Effect.Effect.Success<ReturnType<typeof findQueuedEntries>>
 
 export class BalanceCheckConfig extends Context.Reference<BalanceCheckConfig>()('BalanceCheckConfig', {
   defaultValue: (): {
@@ -36,46 +38,50 @@ export const makeBalanceCheckWorker = Effect.gen(function*() {
   const priorityConfig = yield* QueuePriorityConfig
   const { getFreeBalances } = yield* BalanceCheckWorkerDeps
 
-  const work = Effect.gen(function*() {
+  const prereq = Effect.gen(function*() {
     yield* Metric.increment(queueBalanceCheckTotal)
 
     const entries = yield* findQueuedEntries().pipe(
       Effect.retry(Schedule.exponential(Duration.millis(200), 2).pipe(Schedule.compose(Schedule.recurs(3)))),
       Effect.orDie,
     )
-    if (entries.length === 0) {
-      yield* Effect.annotateCurrentSpan({ 'app.queue.entries_checked': 0 })
-      return
-    }
-
-    const balances = yield* getFreeBalances(entries.map((e) => e.candidateAccountId))
-    const updates = priorityUpdatesForBalances(
-      entries.map((e, i) => ({
-        id: e.id,
-        currentGroup: e.priorityGroup,
-        balance: balances[i] ?? ZERO_PLANCK,
-      })),
-      priorityConfig,
-    )
-
-    if (updates.length > 0) {
-      yield* updatePriorityGroups(updates).pipe(
-        Effect.retry(Schedule.exponential(Duration.millis(200), 2).pipe(Schedule.compose(Schedule.recurs(3)))),
-        Effect.orDie,
-      )
-    }
-
-    yield* Effect.annotateCurrentSpan({
-      'app.queue.entries_checked': entries.length,
-      'app.queue.updates_applied': updates.length,
-    })
+    return Option.liftPredicate(entries, (found) => found.length > 0)
   }).pipe(
     Effect.provideService(DB, db),
     Effect.provideService(Random.Random, rand),
   )
 
+  const work = (entries: QueuedEntries) =>
+    Effect.gen(function*() {
+      const balances = yield* getFreeBalances(entries.map((e) => e.candidateAccountId))
+      const updates = priorityUpdatesForBalances(
+        entries.map((e, i) => ({
+          id: e.id,
+          currentGroup: e.priorityGroup,
+          balance: balances[i] ?? ZERO_PLANCK,
+        })),
+        priorityConfig,
+      )
+
+      if (updates.length > 0) {
+        yield* updatePriorityGroups(updates).pipe(
+          Effect.retry(Schedule.exponential(Duration.millis(200), 2).pipe(Schedule.compose(Schedule.recurs(3)))),
+          Effect.orDie,
+        )
+      }
+
+      yield* Effect.annotateCurrentSpan({
+        'app.queue.entries_checked': entries.length,
+        'app.queue.updates_applied': updates.length,
+      })
+    }).pipe(
+      Effect.provideService(DB, db),
+      Effect.provideService(Random.Random, rand),
+    )
+
   return Daemon.poll({
     name: 'registration-queue-balance-check',
+    prereq,
     work,
     interval: config.pollInterval,
     tick: {

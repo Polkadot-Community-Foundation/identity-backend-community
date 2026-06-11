@@ -150,6 +150,42 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
       code: `result['_tag'] === 'Custom'`,
       filename: TEST_FILENAME,
     },
+
+    {
+      name: 'Should_Pass_When_Unwrap_Right_Tag_Compared_To_Domain_Tag',
+      code: `Either.isRight(result) && result.right._tag === 'Skip'`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Unwrap_Left_Tag_Compared_To_Domain_Tag',
+      code: `if (result.left._tag === 'NetworkError') {}`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Unwrap_Right_Tag_Compared_To_Domain_Tag_Success',
+      code: `if (result.right._tag === 'Success') {}`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Unwrap_Right_Tag_Bare_Read',
+      code: `const tag = result.right._tag`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Unwrap_Right_Tag_Read_In_Match_Value',
+      code: `Match.value(result.right._tag).pipe(Match.when('Skip', () => 1))`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Unwrap_Left_Tag_In_Non_Equality_Binary',
+      code: `if (result.left._tag < 'Left') {}`,
+      filename: TEST_FILENAME,
+    },
+    {
+      name: 'Should_Pass_When_Member_Object_Is_Not_Left_Or_Right_Unwrap',
+      code: `const x = result.data._tag`,
+      filename: TEST_FILENAME,
+    },
   ],
 
   invalid: [
@@ -385,8 +421,8 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
     },
 
     {
-      name: 'Should_Report_When_Accessing_Left_Tag_On_Unwrap',
-      code: `if (result.left._tag === 'NetworkError') {}`,
+      name: 'Should_Report_When_Unwrap_Left_Tag_Strict_Equality_Left',
+      code: `if (result.left._tag === 'Left') {}`,
       filename: TEST_FILENAME,
       errors: [
         {
@@ -396,8 +432,8 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
       ],
     },
     {
-      name: 'Should_Report_When_Accessing_Right_Tag_On_Unwrap',
-      code: `if (result.right._tag === 'Success') {}`,
+      name: 'Should_Report_When_Unwrap_Right_Tag_Strict_Equality_Right',
+      code: `if (result.right._tag === 'Right') {}`,
       filename: TEST_FILENAME,
       errors: [
         {
@@ -407,8 +443,19 @@ ruleTester.run('no-either-tag-assertions', noEitherTagAssertions, {
       ],
     },
     {
-      name: 'Should_Report_When_Unwrap_Left_Tag_Strict_Equality_Left',
-      code: `if (result.left._tag === 'Left') {}`,
+      name: 'Should_Report_When_Unwrap_Right_Tag_Strict_Inequality_Left',
+      code: `if (result.right._tag !== 'Left') {}`,
+      filename: TEST_FILENAME,
+      errors: [
+        {
+          messageId: 'unwrapTagAccess',
+          data: { name: 'result.right._tag' },
+        },
+      ],
+    },
+    {
+      name: 'Should_Report_When_Unwrap_Tag_Either_Literal_On_Left_Of_Comparison',
+      code: `if ('Left' === result.left._tag) {}`,
       filename: TEST_FILENAME,
       errors: [
         {
