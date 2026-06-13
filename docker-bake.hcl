@@ -6,6 +6,10 @@ variable "TAG_CHOPSTICKS"   { default = "chopsticks:e2e-latest" }
 variable "CACHE_EXPORT"     { default = "true" }
 variable "VCS_REF"          { default = "" }
 variable "BUILD_DATE"       { default = "" }
+variable "APP_SERVICE"      { default = "" }
+variable "APP_VERSION"      { default = "" }
+variable "GIT_COMMIT"       { default = "" }
+variable "BUILD_TIME"       { default = "" }
 
 function "cache_to" {
   params = [scope]
@@ -25,8 +29,12 @@ target "app-identity" {
   cache-from = ["type=gha,scope=identity-backend-image"]
   cache-to   = cache_to("identity-backend-image")
   args = {
-    VCS_REF    = VCS_REF
-    BUILD_DATE = BUILD_DATE
+    VCS_REF        = VCS_REF
+    BUILD_DATE     = BUILD_DATE
+    APP_SERVICE    = APP_SERVICE
+    APP_VERSION    = APP_VERSION
+    GIT_COMMIT     = GIT_COMMIT
+    BUILD_TIME     = BUILD_TIME
   }
 }
 

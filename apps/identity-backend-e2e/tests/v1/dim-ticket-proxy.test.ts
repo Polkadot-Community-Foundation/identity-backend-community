@@ -1,4 +1,4 @@
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { hc } from 'hono/client'
 import type { App } from 'identity-backend-container/v1'
 import type { StartedDockerComposeEnvironment } from 'testcontainers'
@@ -38,9 +38,7 @@ describe('E2E: DIM Ticket Granting via Proxy Delegation', () => {
       const who = generateDIMTestAddress(seed)
 
       const response = await app.api.v1['dim-ticket'].$post({ json: { who, dim } })
-      checkResponse(response, 200)
-
-      const data = await response.json()
+      const data = await (await checkResponseWithBody(response, 200)).json()
       expect(data).toEqual(expect.objectContaining({ ticket: who, dim, status: 'PENDING' }))
 
       const finalData = await vi.waitUntil(

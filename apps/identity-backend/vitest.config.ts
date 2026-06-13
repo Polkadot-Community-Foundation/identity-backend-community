@@ -8,6 +8,7 @@ export default defineConfig({
     ...sharedConfig.test,
     testTimeout: process.env.CI ? 240_000 : 120_000,
     hookTimeout: process.env.CI ? 40_000 : 20_000,
+    maxWorkers: process.env.CI ? undefined : '50%',
     coverage: {
       ...sharedConfig.test?.coverage,
     },
@@ -24,6 +25,7 @@ export default defineConfig({
             'src/**/*.test.ts',
             'src/**/*.unit.test.ts',
             'src/**/*.property.test.ts',
+            'tests/**/*.property.test.ts',
           ],
           includeSource: ['src/**/*.{js,ts}'],
           exclude: [

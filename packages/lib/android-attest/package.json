@@ -10,6 +10,10 @@
       "@identity-backend/source": "./src/mod.ts",
       "default": "./dist/index.mjs"
     },
+    "./testing": {
+      "@identity-backend/source": "./src/testing/mod.ts",
+      "default": "./dist/testing.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -53,6 +57,7 @@
   "publishConfig": {
     "exports": {
       ".": "./dist/index.mjs",
+      "./testing": "./dist/testing.mjs",
       "./package.json": "./package.json"
     }
   }

@@ -1,12 +1,12 @@
-import { ChallengeNotFoundError, KeyId } from '@identity-backend/auth/services'
+import { ChallengeRejectedError, KeyId } from '@identity-backend/auth/services'
 import { toArrayBuffer } from '@std/streams'
 import { Context, Effect, Either, Runtime, Schema as S } from 'effect'
 import { createMiddleware } from 'hono/factory'
-import { AppAttestError, AppAttestMiddlewareError, type ConsumeChallengeError } from './types.js'
+import { AppAttestError, AppAttestMiddlewareError } from './types.js'
 
 export namespace AppAttestMiddlewareConfig {
   export type isPackageNameValid = (_: string) => Effect.Effect<boolean>
-  export type ConsumeChallenge = (_: Uint8Array) => Effect.Effect<void, ChallengeNotFoundError | ConsumeChallengeError>
+  export type ConsumeChallenge = (_: Uint8Array) => Effect.Effect<void, ChallengeRejectedError>
 
   export interface GetAssertionResult {
     readonly attestation: { publicKey: string; signCount: number }
@@ -138,40 +138,42 @@ export const makeAppAttestMiddleware = Effect.gen(function*() {
       const decodedKeyId = decodeKeyIdResult.right
 
       const bodyStream = c.req.raw.clone().body
-      if (bodyStream) {
-        const bodyBytes = new Uint8Array(yield* Effect.promise(() => toArrayBuffer(bodyStream)))
+      if (!bodyStream) {
+        return c.json({ error: 'Missing App Attest assertion body' }, 401)
+      }
 
-        const getAssertionResult = yield* getAssertion({
-          keyId: decodedKeyId,
-        }).pipe(Effect.either)
+      const bodyBytes = new Uint8Array(yield* Effect.promise(() => toArrayBuffer(bodyStream)))
 
-        if (Either.isLeft(getAssertionResult)) {
-          return c.json({ error: `Failed to get App Attest assertion: ${getAssertionResult.left.message}` }, 401)
-        }
+      const getAssertionResult = yield* getAssertion({
+        keyId: decodedKeyId,
+      }).pipe(Effect.either)
 
-        const { attestation, publicKey } = getAssertionResult.right
-        const verifyResult = yield* verifyAssertion({
-          attestation,
-          publicKey,
-          challenge: decodedChallenge,
-          clientData: bodyBytes,
-          assertion: decodedPayload,
-          clientId: decodedClientId,
-        }).pipe(Effect.either)
+      if (Either.isLeft(getAssertionResult)) {
+        return c.json({ error: `Failed to get App Attest assertion: ${getAssertionResult.left.message}` }, 401)
+      }
 
-        if (Either.isLeft(verifyResult)) {
-          return c.json({ error: `Invalid App Attest assertion: ${verifyResult.left.message}` }, 401)
-        }
+      const { attestation, publicKey } = getAssertionResult.right
+      const verifyResult = yield* verifyAssertion({
+        attestation,
+        publicKey,
+        challenge: decodedChallenge,
+        clientData: bodyBytes,
+        assertion: decodedPayload,
+        clientId: decodedClientId,
+      }).pipe(Effect.either)
 
-        const { nextSignCount } = verifyResult.right
-        const commitResult = yield* commitAssertion({
-          keyId: decodedKeyId,
-          nextSignCount,
-        }).pipe(Effect.either)
+      if (Either.isLeft(verifyResult)) {
+        return c.json({ error: `Invalid App Attest assertion: ${verifyResult.left.message}` }, 401)
+      }
 
-        if (Either.isLeft(commitResult)) {
-          return c.json({ error: `Failed to commit App Attest assertion: ${commitResult.left.message}` }, 401)
-        }
+      const { nextSignCount } = verifyResult.right
+      const commitResult = yield* commitAssertion({
+        keyId: decodedKeyId,
+        nextSignCount,
+      }).pipe(Effect.either)
+
+      if (Either.isLeft(commitResult)) {
+        return c.json({ error: `Failed to commit App Attest assertion: ${commitResult.left.message}` }, 401)
       }
     }).pipe(
       Effect.catchAllDefect((cause) => AppAttestMiddlewareError.make({ cause })),

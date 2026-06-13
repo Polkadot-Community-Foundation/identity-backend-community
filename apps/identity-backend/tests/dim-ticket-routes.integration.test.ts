@@ -162,9 +162,8 @@ describe('DimTicket Integration', () => {
 
           const res = yield* Effect.promise(() => client.index.$post({ json: { who: SS58_A, dim: 'Game' } }))
           checkResponse(res, 422)
-          const body = yield* Effect.promise(() => res.json() as Promise<{ error: string; available: number }>)
+          const body = yield* Effect.promise(() => res.json() as Promise<{ error: string }>)
           expect.soft(body.error).toBe('No available invites')
-          expect.soft(body.available).toBe(0)
           expect.soft(checkQuota).toHaveBeenCalledWith({ inviter: MOCK_INVITER, dim: 'Game' })
         })))
 

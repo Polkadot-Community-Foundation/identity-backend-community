@@ -1,0 +1,17 @@
+apiVersion: 1
+contactPoints:
+  - orgId: 1
+    name: identity-backend-default
+    receivers:
+      - uid: identity_backend_webhook
+        type: webhook
+        disableResolveMessage: false
+        settings:
+          url: __GRAFANA_WEBHOOK_URL__
+policies:
+  - orgId: 1
+    receiver: identity-backend-default
+    group_by: ["alertname", "severity"]
+    group_wait: 30s
+    group_interval: 5m
+    repeat_interval: 4h

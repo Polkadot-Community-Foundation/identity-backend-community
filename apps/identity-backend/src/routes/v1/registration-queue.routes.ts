@@ -7,7 +7,6 @@ import {
   SMARTBEAR,
 } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
 import {
   ClaimCommand,
   ClaimUsernameExecutor,
@@ -21,6 +20,7 @@ import { findEntryByCandidate, getQueuePosition } from '#root/username-registrat
 import type { HttpBindings } from '@hono/node-server'
 import { createRoute, z } from '@hono/zod-openapi'
 import { DB } from '@identity-backend/db'
+import { bridgeSpanContext } from '@identity-backend/observability'
 import { Ss58StringFromHex } from '@identity-backend/substrate-schema'
 import type { SpanContext } from '@opentelemetry/api'
 import { Match, Option as O } from 'effect'

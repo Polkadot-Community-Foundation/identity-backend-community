@@ -5,7 +5,6 @@ import {
   dimTicketRegistrationLatencyHistogram,
   dimTicketRegistrationsCounter,
 } from '#root/features/dim/dim-ticket.metrics.js'
-import { buildSpanLinks } from '#root/tracing/span-links.js'
 import {
   BatchReadyForSubmission,
   computeRetryDelay,
@@ -13,6 +12,7 @@ import {
   DimTicketRecord,
   planBatchProcessing,
 } from '@identity-backend/dim-ticket'
+import { buildSpanLinks } from '@identity-backend/observability'
 import { eq, inArray } from 'drizzle-orm'
 import {
   Array as Arr,

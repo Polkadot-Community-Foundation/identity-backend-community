@@ -15,4 +15,4 @@ export class AppAttestError extends S.TaggedError<AppAttestError>('AppAttestErro
   },
 ) {}
 
-export { ConsumeChallengeError } from '@identity-backend/auth/types'
+export { ChallengeRejectedError } from '@identity-backend/auth/types'

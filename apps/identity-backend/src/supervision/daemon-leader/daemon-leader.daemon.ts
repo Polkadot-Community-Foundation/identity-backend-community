@@ -7,6 +7,7 @@ import { DimTicketSupervisor } from '../dim-ticket/mod.js'
 import { IndividualityIndexerSupervisor } from '../individuality-indexer/mod.js'
 import { InvitationTicketSupervisor } from '../invitation-ticket/invitation-ticket.daemon.js'
 import { NotificationsProcessorSupervisor } from '../notifications-processor/mod.js'
+import { PgMonitorSupervisor } from '../pg-monitor/mod.js'
 
 export interface DaemonLeaderSupervisorRuntimeConfig {
   readonly lockRetryBaseDelay: Duration.Duration
@@ -37,6 +38,7 @@ export const layerDaemonLeaderSupervisor = Layer.scopedDiscard(
         Effect.serviceOption(InvitationTicketSupervisor),
         Effect.serviceOption(NotificationsProcessorSupervisor),
         Effect.serviceOption(LiteUsernameRegistrationSupervisor),
+        Effect.serviceOption(PgMonitorSupervisor),
         Effect.serviceOption(RegistrationQueueSupervisor),
       ] as const,
     ).pipe(Effect.map(Array.getSomes))

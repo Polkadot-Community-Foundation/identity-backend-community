@@ -10,7 +10,6 @@ const PREFIX = 'register_usernames_v1_route'
 export const layerRegisterUsernameV1Routes = Layer.effect(
   RegisterUsernamesV1RouteConfig,
   Effect.gen(function*() {
-    const { encodeHex } = yield* Effect.promise(() => import('@std/encoding/hex'))
     const { sr25519, ss58Decode } = yield* Effect.promise(() => import('@polkadot-labs/hdkd-helpers'))
     const { Ss58String } = yield* Effect.promise(() => import('@identity-backend/substrate-schema'))
     const {
@@ -48,15 +47,7 @@ export const layerRegisterUsernameV1Routes = Layer.effect(
 
     const verifySignature = (Effect.fn(`${PREFIX}.verifySignature`)(
       function*(params) {
-        yield* Effect.annotateCurrentSpan({
-          signature: encodeHex(params.signature),
-          message: new TextDecoder().decode(params.message),
-          candidateAccountId: encodeHex(params.candidateAccountId),
-        })
-
         const publicKey = yield* Effect.sync(() => ss58Decode(params.candidateAccountId)[0])
-
-        yield* Effect.annotateCurrentSpan({ publicKey: encodeHex(publicKey) })
 
         const isValidSignature = yield* Effect.sync(() =>
           sr25519.verify(

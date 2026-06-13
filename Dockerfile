@@ -8,6 +8,12 @@ ENV PATH="$PNPM_HOME:$PATH"
 ENV npm_config_store_dir="/pnpm/store"
 
 RUN corepack enable
+# `node:24-slim` omits /etc/ssl/certs/ca-certificates.crt. Node 24's TLS has a
+# 145-CA hardcoded fallback, so plain Node HTTPS still works — but `sst install`
+# downloads a Go binary (Pulumi) and the Posthog client both use the system CA
+# bundle and fail with `x509: certificate signed by unknown authority`.
+RUN apt-get update && apt-get install -y --no-install-recommends ca-certificates \
+    && rm -rf /var/lib/apt/lists/*
 
 FROM base AS deps-identity
 WORKDIR /usr/src/app
@@ -61,6 +67,16 @@ RUN pnpm deploy --filter=identity-backend-e2e-people-startup-container --prod --
 FROM oven/bun:1.3.13@sha256:87416c977a612a204eb54ab9f3927023c2a3c971f4f345a01da08ea6262ae30e AS app-identity
 
 
+
+ARG APP_SERVICE=""
+ARG APP_VERSION=""
+ARG GIT_COMMIT=""
+ARG BUILD_TIME=""
+
+ENV APP_SERVICE=${APP_SERVICE} \
+    APP_VERSION=${APP_VERSION} \
+    GIT_COMMIT=${GIT_COMMIT} \
+    BUILD_TIME=${BUILD_TIME}
 
 COPY --link --from=build-identity /prod/app /prod/app
 COPY --link --from=build-api-docs /usr/src/app/apps/api-docs/dist /prod/app/static

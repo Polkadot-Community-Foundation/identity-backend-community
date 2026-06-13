@@ -1,5 +1,5 @@
 import { createOpenAPIHono } from '#root/lib/problem-details.js'
-import { AuthPlugin, optionalJwt, verifyJwt } from '#root/middleware/mod.js'
+import { AuthPlugin, makeRateLimit, optionalJwt, verifyJwt } from '#root/middleware/mod.js'
 import { Config, Context, Effect, Layer, Redacted } from 'effect'
 import type { Hono } from 'hono'
 import type { BlankEnv, BlankSchema, Env, Schema } from 'hono/types'
@@ -8,7 +8,7 @@ import { makeAttesterRoute } from './attester.routes.js'
 import { makeDIMTicketRoute } from './dim-ticket.routes.js'
 import { makeInvitationTicketRoute } from './invitation-ticket.routes.js'
 import { makeNotifyRoute } from './notify/routes.js'
-import { makeRegistrationQueueRoute } from './registration-queue.routes.js'
+import { makeIssuePocRoute } from './poc/issue-poc.route.js'
 import { makeSchemaRoute } from './schemas/routes.js'
 import { makeSubscriptionPublicRoutes, makeSubscriptionRoutes } from './subscriptions/routes.js'
 import { makeTokenRoute } from './token/routes.js'
@@ -35,6 +35,7 @@ export const makeRoutesWithOutDependencies = <
     const makeV1Routes = (jwtSecret: Redacted.Redacted<string>, jwtAuthEnforced: boolean) =>
       Effect.gen(function*() {
         const authPlugin = yield* AuthPlugin
+        const rl = yield* makeRateLimit
 
         const authRoutes = yield* makeAuthRoutes({ tags: ['v1'] })
 
@@ -48,28 +49,29 @@ export const makeRoutesWithOutDependencies = <
           : createOpenAPIHono() as Effect.Effect.Success<ReturnType<typeof makeSubscriptionPublicRoutes>>
 
         const subscriptionRouter = createOpenAPIHono()
+          .use('/vapid-public-key', rl.publicReads)
           .route('/', publicSubRoutes)
-          .use(verifyJwt(Redacted.value(jwtSecret)))
+          .use(verifyJwt(Redacted.value(jwtSecret)), rl.authActions)
           .route('/', yield* makeSubscriptionRoutes())
-
-        const registrationRouter = createOpenAPIHono()
-          .use(verifyJwt(Redacted.value(jwtSecret)))
-          .route('/', yield* makeRegistrationQueueRoute)
 
         return app.route(
           'api/v1',
           createOpenAPIHono()
-            .use('/dim-ticket/*', jwtMiddleware(Redacted.value(jwtSecret)))
-            .use('/invitation-ticket/*', jwtMiddleware(Redacted.value(jwtSecret)))
-            .use('/notify/*', jwtMiddleware(Redacted.value(jwtSecret)))
-            .use('/turn/*', jwtMiddleware(Redacted.value(jwtSecret)))
+            .use('/dim-ticket/*', jwtMiddleware(Redacted.value(jwtSecret)), rl.authActions)
+            .use('/invitation-ticket/*', jwtMiddleware(Redacted.value(jwtSecret)), rl.authActions)
+            .use('/notify/*', jwtMiddleware(Redacted.value(jwtSecret)), rl.authActions)
+            .use('/turn/*', jwtMiddleware(Redacted.value(jwtSecret)), rl.authActions)
+            .use('/attester', rl.publicReads)
+            .use('/schemas/*', rl.publicReads)
             .route(
               '/usernames',
-              yield* makeUsernamesRoute(jwtMiddleware(Redacted.value(jwtSecret))),
+              yield* makeUsernamesRoute(jwtMiddleware(Redacted.value(jwtSecret)), {
+                authActions: rl.authActions,
+                search: rl.search,
+              }),
             )
             .route('/dim-ticket', yield* makeDIMTicketRoute())
             .route('/invitation-ticket', yield* makeInvitationTicketRoute())
-            .route('/registration', registrationRouter)
             .route(
               '/auth',
               createOpenAPIHono()
@@ -79,6 +81,7 @@ export const makeRoutesWithOutDependencies = <
                 .route('/token', yield* makeTokenRoute()),
             )
             .route('/attester', yield* makeAttesterRoute())
+            .route('/poc', yield* makeIssuePocRoute)
             .route('/turn', yield* makeTurnIssueRoute)
             .route('/schemas', yield* makeSchemaRoute())
             .route('/notify', yield* makeNotifyRoute())

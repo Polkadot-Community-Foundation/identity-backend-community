@@ -1,10 +1,38 @@
 import { describe, expect, it } from '@effect/vitest'
 import { checkResponse } from '@identity-backend/testing/hono'
-import { Effect, Layer } from 'effect'
+import { Effect, Layer, Match, Schema as S } from 'effect'
 import { Hono } from 'hono'
+import type { MiddlewareHandler } from 'hono'
 import { createMiddleware } from 'hono/factory'
 import { testClient } from 'hono/testing'
+import {
+  AndroidAttestationMiddlewareConfig,
+  AndroidAttestationOutcome,
+  makeAndroidAttestationMiddleware,
+} from '../attestation.middleware.js'
 import { AuthMiddlewareConfig, makeAuthMiddleware } from '../middleware.js'
+
+const VALID_LEAF = 'dmFsaWQtbGVhZg=='
+const INVALID_LEAF = 'aW52YWxpZC1sZWFm'
+const UNAVAILABLE_LEAF = 'dW5hdmFpbGFibGUtbGVhZg=='
+const DEFECT_LEAF = 'ZGVmZWN0LWxlYWY='
+const INTERMEDIATE = 'aW50ZXJtZWRpYXRl'
+
+class FakeVerifyDefect extends S.TaggedError<FakeVerifyDefect>()('FakeVerifyDefect', {}) {}
+
+const fakeVerifyChain: AndroidAttestationMiddlewareConfig['Type']['verifyChain'] = ({ leafCertDer }) => {
+  const leaf = new TextDecoder().decode(new Uint8Array(leafCertDer))
+  return Match.value(leaf).pipe(
+    Match.when('valid-leaf', () => Effect.succeed(AndroidAttestationOutcome.Verified)),
+    Match.when('unavailable-leaf', () => Effect.succeed(AndroidAttestationOutcome.Unavailable)),
+    Match.when('defect-leaf', () => Effect.die(new FakeVerifyDefect())),
+    Match.orElse(() => Effect.succeed(AndroidAttestationOutcome.Rejected)),
+  )
+}
+
+const layerFakeAndroidAttestation = Layer.succeed(AndroidAttestationMiddlewareConfig, {
+  verifyChain: fakeVerifyChain,
+})
 
 const mockPlayIntegrityMiddleware = createMiddleware(async (c, next) => {
   if (c.req.header('Auth-Android-Package') === 'invalid') {
@@ -25,11 +53,19 @@ const mockAppAttestMiddleware = createMiddleware(async (c, next) => {
 })
 
 describe('Auth Plugin Test', () => {
-  const makeClient = (enforceAuth: boolean) =>
+  const makeClient = (
+    enforceAuth: boolean,
+    overrides?: { readonly playIntegrityMiddleware?: MiddlewareHandler },
+  ) =>
     Effect.gen(function*() {
+      const androidAttestationMiddleware = yield* makeAndroidAttestationMiddleware.pipe(
+        Effect.provide(layerFakeAndroidAttestation),
+      )
+
       const middleware = yield* makeAuthMiddleware(
-        mockPlayIntegrityMiddleware,
+        overrides?.playIntegrityMiddleware ?? mockPlayIntegrityMiddleware,
         mockAppAttestMiddleware,
+        androidAttestationMiddleware,
       ).pipe(
         Effect.provide(Layer.succeed(AuthMiddlewareConfig, { enforceAuth })),
       )
@@ -40,6 +76,11 @@ describe('Auth Plugin Test', () => {
           .get('/', (c) => {
             const statusCode: 200 | 401 = 200 + 0 as 200 | 401
             return c.json({ success: true }, statusCode)
+          })
+          .post('/', async (c) => {
+            const body = await c.req.json().catch(() => ({}))
+            const text = await c.req.text()
+            return c.json({ success: true, echoedChain: body.attestationChain ?? null, bodyLength: text.length }, 200)
           })
 
         return testClient(app)
@@ -116,23 +157,6 @@ describe('Auth Plugin Test', () => {
       checkResponse(response, 400)
     }))
 
-  it.effect('Should_DispatchToPlayIntegrity_When_AttestationTypeIsPlayIntegrity', () =>
-    Effect.gen(function*() {
-      const client = yield* makeClient(true)
-
-      const response = yield* Effect.tryPromise(() =>
-        client.index.$get({}, {
-          headers: {
-            'Auth-Android-Package': 'valid.android.package',
-            'Auth-Attestation-Type': 'play-integrity',
-          },
-        })
-      )
-      const jsonResponse = yield* Effect.promise(() => response.json())
-      expect(jsonResponse).toEqual({ success: true })
-      checkResponse(response, 200)
-    }))
-
   it.effect('Should_DispatchToNext_When_AttestationTypeIsKeyAttestation', () =>
     Effect.gen(function*() {
       const client = yield* makeClient(true)
@@ -154,10 +178,13 @@ describe('Auth Plugin Test', () => {
       const client = yield* makeClient(true)
 
       const response = yield* Effect.tryPromise(() =>
-        client.index.$get({}, {
+        client.index.$post({
+          json: { attestationChain: [VALID_LEAF, INTERMEDIATE] },
+        }, {
           headers: {
             'Auth-Android-Package': 'invalid',
             'Auth-Attestation-Type': 'play-integrity',
+            'Auth-Challenge': 'c29tZS1jaGFsbGVuZ2U=',
           },
         })
       )
@@ -329,5 +356,232 @@ describe('Auth Plugin Test', () => {
       const jsonResponse = yield* Effect.promise(() => response.json())
       expect(jsonResponse).toEqual({ success: true })
       checkResponse(response, 200)
+    }))
+
+  const countingPlayIntegrity = (counter: { count: number }): MiddlewareHandler =>
+    createMiddleware(async (c, next) => {
+      counter.count += 1
+      return next()
+    })
+
+  const playIntegrityHeaders = {
+    'Auth-Android-Package': 'valid.android.package',
+    'Auth-Attestation-Type': 'play-integrity',
+    'Auth-Challenge': 'c29tZS1jaGFsbGVuZ2U=',
+  }
+
+  it.effect('Should_RejectAndSkipPlayIntegrity_When_EnforcedAndAttestationChainMissing', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(true, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({ json: {} }, { headers: playIntegrityHeaders })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'MissingAndroidAttestationChain',
+        error: 'Missing Android Attestation chain',
+      })
+      checkResponse(response, 401)
+      expect(playIntegrityCalls.count).toBe(0)
+    }))
+
+  it.effect('Should_RejectAndSkipPlayIntegrity_When_EnforcedAndAttestationChainInvalid', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(true, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({
+          json: { attestationChain: [INVALID_LEAF, INTERMEDIATE] },
+        }, { headers: playIntegrityHeaders })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'AndroidAttestationFailed',
+        error: 'Android attestation verification failed',
+      })
+      checkResponse(response, 401)
+      expect(playIntegrityCalls.count).toBe(0)
+    }))
+
+  it.effect('Should_DispatchToPlayIntegrity_When_EnforcedAndAttestationChainValid', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(true, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({
+          json: { attestationChain: [VALID_LEAF, INTERMEDIATE] },
+        }, { headers: playIntegrityHeaders })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        success: true,
+        echoedChain: [VALID_LEAF, INTERMEDIATE],
+        bodyLength: expect.any(Number),
+      })
+      checkResponse(response, 200)
+      expect(playIntegrityCalls.count).toBe(1)
+    }))
+
+  it.effect('Should_DispatchToPlayIntegrity_When_SoftGateAndAttestationChainMissing', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(false, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({ json: {} }, { headers: playIntegrityHeaders })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({ success: true, echoedChain: null, bodyLength: expect.any(Number) })
+      checkResponse(response, 200)
+      expect(playIntegrityCalls.count).toBe(1)
+    }))
+
+  it.effect('Should_RejectAndSkipPlayIntegrity_When_SoftGateAndAttestationChainInvalid', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(false, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({
+          json: { attestationChain: [INVALID_LEAF, INTERMEDIATE] },
+        }, { headers: playIntegrityHeaders })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'AndroidAttestationFailed',
+        error: 'Android attestation verification failed',
+      })
+      checkResponse(response, 401)
+      expect(playIntegrityCalls.count).toBe(0)
+    }))
+
+  it.effect('Should_DispatchToPlayIntegrity_When_SoftGateAndAttestationChainValid', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(false, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({
+          json: { attestationChain: [VALID_LEAF, INTERMEDIATE] },
+        }, { headers: playIntegrityHeaders })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        success: true,
+        echoedChain: [VALID_LEAF, INTERMEDIATE],
+        bodyLength: expect.any(Number),
+      })
+      checkResponse(response, 200)
+      expect(playIntegrityCalls.count).toBe(1)
+    }))
+
+  it.effect('Should_RejectAndSkipPlayIntegrity_When_EnforcedAndChallengeHeaderMissing', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(true, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({
+          json: { attestationChain: [VALID_LEAF, INTERMEDIATE] },
+        }, {
+          headers: {
+            'Auth-Android-Package': 'valid.android.package',
+            'Auth-Attestation-Type': 'play-integrity',
+          },
+        })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'AndroidAttestationFailed',
+        error: 'Android attestation verification failed',
+      })
+      checkResponse(response, 401)
+      expect(playIntegrityCalls.count).toBe(0)
+    }))
+
+  it.effect('Should_TreatMalformedBodyAsMissingChain_When_EnforcedAndPlayIntegrity', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(true, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({ json: { attestationChain: 'not-an-array' } }, { headers: playIntegrityHeaders })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'MissingAndroidAttestationChain',
+        error: 'Missing Android Attestation chain',
+      })
+      checkResponse(response, 401)
+      expect(playIntegrityCalls.count).toBe(0)
+    }))
+
+  it.effect('Should_Return503AndSkipPlayIntegrity_When_EnforcedAndCrlUnavailable', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(true, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({
+          json: { attestationChain: [UNAVAILABLE_LEAF, INTERMEDIATE] },
+        }, { headers: playIntegrityHeaders })
+      )
+      const jsonResponse = yield* Effect.promise(() => response.json())
+      expect(jsonResponse).toEqual({
+        _tag: 'AndroidAttestationCrlUnavailable',
+        error: 'Android revocation list is currently unavailable. Retry with a fresh challenge.',
+      })
+      expect(jsonResponse).not.toEqual({
+        _tag: 'AndroidAttestationFailed',
+        error: 'Android attestation verification failed',
+      })
+      checkResponse(response, 503)
+      expect(playIntegrityCalls.count).toBe(0)
+    }))
+
+  it.effect('Should_NotReturn401OrDispatch_When_EnforcedAndVerifyChainDies', () =>
+    Effect.gen(function*() {
+      const playIntegrityCalls = { count: 0 }
+      const client = yield* makeClient(true, {
+        playIntegrityMiddleware: countingPlayIntegrity(playIntegrityCalls),
+      })
+
+      const response = yield* Effect.tryPromise(() =>
+        client.index.$post({
+          json: { attestationChain: [DEFECT_LEAF, INTERMEDIATE] },
+        }, { headers: playIntegrityHeaders })
+      ).pipe(Effect.either)
+
+      const status = Match.value(response).pipe(
+        Match.tag('Left', () => 500),
+        Match.tag('Right', ({ right }) => right.status),
+        Match.exhaustive,
+      )
+      expect(status).not.toBe(401)
+      expect(status).not.toBe(200)
+      expect(status).toBeGreaterThanOrEqual(500)
+      expect(playIntegrityCalls.count).toBe(0)
     }))
 })

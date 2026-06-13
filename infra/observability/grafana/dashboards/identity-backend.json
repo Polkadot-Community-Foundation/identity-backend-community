@@ -1,0 +1,183 @@
+{
+  "uid": "identity-backend",
+  "title": "Identity Backend",
+  "tags": ["identity-backend"],
+  "schemaVersion": 39,
+  "timezone": "",
+  "time": { "from": "now-3h", "to": "now" },
+  "templating": {
+    "list": [
+      {
+        "name": "datasource",
+        "type": "datasource",
+        "query": "prometheus",
+        "current": {},
+        "hide": 0
+      },
+      {
+        "name": "rate_interval",
+        "type": "interval",
+        "query": "1m,5m,10m,30m,1h",
+        "current": { "text": "5m", "value": "5m" },
+        "hide": 0
+      }
+    ]
+  },
+  "panels": [
+    {
+      "type": "stat",
+      "title": "Registrations completing now (5m)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 8, "x": 0, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "ops",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "red", "value": null },
+              { "color": "yellow", "value": 0.1 },
+              { "color": "green", "value": 1 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(app_people_username_registrations_completed_total{completion=\"item_completed\"}[$rate_interval]))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Time to register — p95 (last 5m)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 8, "x": 8, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "s",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 60 },
+              { "color": "red", "value": 90 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "histogram_quantile(0.95, sum(rate(app_people_username_e2e_duration_bucket[$rate_interval])) by (le))"
+        }
+      ]
+    },
+    {
+      "type": "stat",
+      "title": "Rows waiting in queue",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 6, "w": 8, "x": 16, "y": 0 },
+      "fieldConfig": {
+        "defaults": {
+          "unit": "short",
+          "thresholds": {
+            "mode": "absolute",
+            "steps": [
+              { "color": "green", "value": null },
+              { "color": "yellow", "value": 20 },
+              { "color": "red", "value": 100 }
+            ]
+          }
+        },
+        "overrides": []
+      },
+      "options": { "reduceOptions": { "calcs": ["lastNotNull"] }, "colorMode": "background" },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "max(app_queue_depth)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Registrations: succeeded vs failed (5m rate)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "ops" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "S",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(app_people_username_registrations_completed_total[$rate_interval]))",
+          "legendFormat": "completed"
+        },
+        {
+          "refId": "F",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(app_people_username_registrations_failed_total[$rate_interval]))",
+          "legendFormat": "failed"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "5xx error ratio",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 6 },
+      "fieldConfig": { "defaults": { "unit": "percentunit", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "sum(rate(http_server_request_count_total{http_response_status_code=~\"5..\"}[$rate_interval])) / clamp_min(sum(rate(http_server_request_count_total[$rate_interval])), 1)"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Chain finalized block height (per network)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 0, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "none" }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "A",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "max by (network) (blockchain_finalized_block)",
+          "legendFormat": "{{network}}"
+        }
+      ]
+    },
+    {
+      "type": "timeseries",
+      "title": "Daemon heartbeat & leader (1=up, 0=down)",
+      "datasource": { "type": "prometheus", "uid": "${datasource}" },
+      "gridPos": { "h": 8, "w": 12, "x": 12, "y": 14 },
+      "fieldConfig": { "defaults": { "unit": "none", "max": 1, "min": 0 }, "overrides": [] },
+      "targets": [
+        {
+          "refId": "H",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "avg_over_time(app_people_username_daemon_heartbeat[$rate_interval])",
+          "legendFormat": "heartbeat"
+        },
+        {
+          "refId": "L",
+          "datasource": { "type": "prometheus", "uid": "${datasource}" },
+          "expr": "avg_over_time(app_people_username_daemon_leader[$rate_interval])",
+          "legendFormat": "leader"
+        }
+      ]
+    }
+  ]
+}

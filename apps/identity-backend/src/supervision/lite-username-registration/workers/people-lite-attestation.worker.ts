@@ -1,20 +1,28 @@
 import { outcomeFromTxResult } from '#root/batch-backoff/batch-backoff.acl.js'
 import { recordBatchOutcome, RecordBatchOutcomeDeps } from '#root/batch-backoff/batch-backoff.executor.js'
 import { type BatchSize, BatchSizePolicy } from '#root/batch-backoff/batch-backoff.schema.js'
-import { TransactionSubmitError } from '#root/data/mod.js'
 import { schema } from '#root/db/mod.js'
 import type { IndividualityUsername } from '#root/db/schema.js'
+import { ChainId, ChainSubmitter } from '#root/infrastructure/adapters/blockchain/chain-submitter.adapter.js'
+import type { TransactionIncluded } from '#root/infrastructure/adapters/blockchain/finalized-transaction.schema.js'
 import { PeopleAPI } from '#root/infrastructure/adapters/blockchain/people-chain.adapter.js'
 import { UtilityAPI } from '#root/infrastructure/adapters/blockchain/utility-chain.adapter.js'
-import { logTxEvent, runTxFinalized, watchThroughReorgs } from '#root/infrastructure/tx-event.io.js'
-import { peopleRegisterUsernamesLatencyHistogram } from '#root/metrics/people.js'
-import { buildSpanLinks } from '#root/tracing/span-links.js'
+import {
+  peopleUsernameDaemonHeartbeatGauge,
+  peopleUsernameDaemonLeaderGauge,
+  peopleUsernameDaemonTickDurationHistogram,
+  peopleUsernameE2eDurationHistogram,
+  peopleUsernameQueueAgeHistogram,
+  peopleUsernameRegistrationsCompletedCounter,
+  peopleUsernameRegistrationsFailedCounter,
+} from '#root/metrics/people.js'
 import { sr25519 } from '@identity-backend/crypto'
 import { DB } from '@identity-backend/db'
 import { Daemon } from '@identity-backend/effect-daemon-spec'
-import { fromObservable } from '@identity-backend/rx-effect'
+import { buildSpanLinks } from '@identity-backend/observability'
+import { TxFinalizationError, TxInclusionTimeoutError } from '@identity-backend/tx-events'
 import { and, eq } from 'drizzle-orm'
-import { Array, Clock, Context, Duration, Effect, Either, Metric, Option, pipe, Ref, Schedule, Stream } from 'effect'
+import { Array, Clock, Context, Duration, Effect, Either, Match, Metric, Option, pipe, Ref, Schedule } from 'effect'
 import { Binary, type PolkadotSigner, type TxFinalized } from 'polkadot-api'
 
 interface ProcessedEvents {
@@ -122,7 +130,8 @@ const processEvents = (
     Effect.withLogSpan('PeopleLiteAttestationWorker/processEvents'),
   )
 
-type ProcessedResult = TxFinalized & {
+type ProcessedResult = {
+  readonly block: TransactionIncluded['block']
   readonly unregisteredUsernames: readonly IndividualityUsername[]
   readonly processedEvents: ProcessedEvents
 }
@@ -213,17 +222,35 @@ const updateDB = (result: ProcessedResult) =>
     Effect.withLogSpan('PeopleLiteAttestationWorker/updateDB'),
   )
 
+const incrementFailed = (failure: string, amount: number): Effect.Effect<void> =>
+  amount > 0
+    ? Metric.incrementBy(Metric.tagged(peopleUsernameRegistrationsFailedCounter, 'failure', failure), amount)
+    : Effect.void
+
+const incrementCompleted = (completion: string, amount: number): Effect.Effect<void> =>
+  amount > 0
+    ? Metric.incrementBy(Metric.tagged(peopleUsernameRegistrationsCompletedCounter, 'completion', completion), amount)
+    : Effect.void
+
+const failureTagForSubmissionError = (
+  error: TxInclusionTimeoutError | TxFinalizationError | { readonly _tag: string },
+): 'tx_not_included' | 'finalization_timeout' | 'submit_error' =>
+  Match.value(error).pipe(
+    Match.tag('TxInclusionTimeoutError', () => 'tx_not_included' as const),
+    Match.tag('TxFinalizationError', () => 'finalization_timeout' as const),
+    Match.orElse(() => 'submit_error' as const),
+  )
+
 export class PeopleLiteAttestationWorkerConfig extends Context.Tag(
   'PeopleLiteAttestationWorkerConfig',
 )<
   PeopleLiteAttestationWorkerConfig,
   {
-    readonly submitTimeout: Duration.Duration
+    readonly inclusionTimeout: Duration.Duration
+    readonly finalizationTimeout: Duration.Duration
     readonly batchSize: BatchSize
     readonly pollInterval: Duration.Duration
     readonly tickTimeout: Duration.Duration
-    readonly operationsTotalCounter: Metric.Metric.Counter<number>
-    readonly operationsFailuresCounter: Metric.Metric.Counter<number>
     readonly keypair: sr25519.Keypair
     readonly proxyDelegationEnabled: boolean
     readonly attesterPublicKey: sr25519.PublicKey
@@ -235,6 +262,7 @@ export const make = Effect.gen(function*() {
   const db = yield* DB
   const peopleApi = yield* PeopleAPI
   const utilityAPI = yield* UtilityAPI
+  const chainSubmitter = yield* ChainSubmitter
   const batchSizePolicy = BatchSizePolicy.Default(config.batchSize)
   const batchSizeRef = yield* Ref.make(batchSizePolicy.max)
   const batchBackoff: Context.Tag.Service<typeof RecordBatchOutcomeDeps> = {
@@ -271,7 +299,6 @@ export const make = Effect.gen(function*() {
   }
 
   const individualityAuthority = createPeopleSigner(config.keypair)
-  const { operationsTotalCounter, operationsFailuresCounter } = config
 
   const prereq = Effect.gen(function*() {
     const now = yield* Clock.currentTimeMillis
@@ -296,6 +323,15 @@ export const make = Effect.gen(function*() {
           Schedule.recurs(2),
         ),
       ),
+    )
+    yield* Effect.forEach(
+      unregisteredUsernames,
+      (row) =>
+        Metric.update(
+          peopleUsernameQueueAgeHistogram,
+          Math.max(0, (now - row.createdAt.getTime()) / 1000),
+        ),
+      { discard: true },
     )
     return Option.liftPredicate(unregisteredUsernames, (found) => found.length > 0)
   }).pipe(Effect.orDie)
@@ -324,10 +360,9 @@ export const make = Effect.gen(function*() {
         ),
       )
 
-      const successRef = yield* Ref.make(false)
-
       yield* Effect.gen(function*() {
-        yield* operationsTotalCounter(Effect.succeed(unregisteredUsernames.length))
+        yield* Metric.set(peopleUsernameDaemonLeaderGauge, 1)
+        yield* Effect.annotateCurrentSpan({ 'app.people.username.batch.size': unregisteredUsernames.length })
 
         yield* Effect.logInfo('Register People Usernames Job Started')
 
@@ -372,31 +407,36 @@ export const make = Effect.gen(function*() {
 
         yield* Effect.logDebug('Register People usernames extrinsic started')
 
-        const submission = yield* Effect.either(pipe(
-          Effect.sync(() => tx.signSubmitAndWatch(individualityAuthority)),
-          Effect.map(fromObservable((err) => new TransactionSubmitError({ cause: err }))),
-          Effect.andThen((stream) =>
-            pipe(
-              stream,
-              Stream.tap(logTxEvent),
-              watchThroughReorgs,
-              runTxFinalized({ timeout: config.submitTimeout }),
-            )
-          ),
-        ))
+        const submission = yield* Effect.either(
+          chainSubmitter.submit(individualityAuthority, tx, {
+            chain: ChainId.make('people'),
+            timeout: config.inclusionTimeout,
+            finalizationTimeout: config.finalizationTimeout,
+          }),
+        )
         yield* recordBatchOutcome(outcomeFromTxResult(submission)).pipe(
           Effect.provideService(RecordBatchOutcomeDeps, batchBackoff),
         )
 
         if (Either.isLeft(submission)) {
-          yield* Effect.logWarning('Register People usernames extrinsic failed', { 'error.type': submission.left._tag })
+          const failure = failureTagForSubmissionError(submission.left)
+          yield* Effect.logWarning('Register People usernames extrinsic failed', {
+            'error.type': submission.left._tag,
+            'failure': failure,
+          })
+          yield* incrementFailed(failure, unregisteredUsernames.length)
           return
         }
-        if (!submission.right.ok) {
+        const included = Match.value(submission.right).pipe(
+          Match.tag('TransactionIncluded', (transaction) => Option.some(transaction)),
+          Match.tag('TransactionReverted', () => Option.none<TransactionIncluded>()),
+          Match.exhaustive,
+        )
+        if (Option.isNone(included)) {
           return
         }
 
-        const txResult = submission.right
+        const txResult = included.value
         yield* Effect.annotateLogsScoped({
           blockHash: txResult.block.hash,
           blockNumber: txResult.block.number,
@@ -407,8 +447,20 @@ export const make = Effect.gen(function*() {
         yield* Effect.logDebug('Register People usernames extrinsic completed')
 
         const processedEvents = yield* processEvents(txResult.events, utilityAPI)
-        yield* Ref.set(successRef, true)
-        yield* operationsFailuresCounter(Effect.succeed(processedEvents.terminalErrors.length))
+        const completedAt = yield* Clock.currentTimeMillis
+        yield* incrementCompleted('item_completed', processedEvents.successes.length)
+        yield* incrementCompleted('already_registered_on_chain', processedEvents.alreadyRegistered.length)
+        yield* incrementFailed('terminal', processedEvents.terminalErrors.length)
+        yield* incrementFailed('retryable', processedEvents.retryableItems.length)
+        yield* Effect.forEach(
+          [...processedEvents.successes, ...processedEvents.alreadyRegistered],
+          (index) =>
+            Metric.update(
+              peopleUsernameE2eDurationHistogram,
+              Math.max(0, (completedAt - unregisteredUsernames[index]!.createdAt.getTime()) / 1000),
+            ),
+          { discard: true },
+        )
 
         yield* Effect.logDebug('Committing Register People usernames results to database')
 
@@ -459,23 +511,17 @@ export const make = Effect.gen(function*() {
           notRegisteredUsernames: Array.map(notRegisteredUsernames, ({ username }) => username),
         })
 
-        yield* updateDB({
-          ...txResult,
+        yield* Effect.uninterruptible(updateDB({
+          block: txResult.block,
           unregisteredUsernames,
           processedEvents,
-        })
+        }))
 
         yield* Effect.logDebug('Committed Register People usernames results to database')
         yield* Effect.log('Register People usernames job completed')
-      }).pipe(
-        Effect.ensuring(
-          Effect.gen(function*() {
-            if (!(yield* Ref.get(successRef))) {
-              yield* operationsFailuresCounter(Effect.succeed(unregisteredUsernames.length))
-            }
-          }),
-        ),
-      )
+      })
+
+      yield* Metric.set(peopleUsernameDaemonHeartbeatGauge, 1)
     }).pipe(
       Effect.provideService(DB, db),
       Effect.scoped,
@@ -492,7 +538,7 @@ export const make = Effect.gen(function*() {
       tickTimeout: config.tickTimeout,
     },
     tickHooks: {
-      trackDuration: peopleRegisterUsernamesLatencyHistogram,
+      trackDuration: peopleUsernameDaemonTickDurationHistogram,
     },
     lock: { mode: 'none' },
   })

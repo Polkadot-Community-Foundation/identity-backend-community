@@ -1,4 +1,5 @@
 import {
+  ANDROID_ATTESTATION_ROOT_PEMS,
   ANDROID_PACKAGE_NAMES,
   ANDROID_SIGNING_DIGEST_PLAYSTORE,
   ANDROID_SIGNING_DIGEST_WEBSITE,
@@ -17,7 +18,6 @@ import {
   SMARTBEAR,
 } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
 import type { HttpBindings } from '@hono/node-server'
 import { createRoute, z } from '@hono/zod-openapi'
 import {
@@ -31,12 +31,15 @@ import {
   SigningDigestHex,
   verifyAndroidAttestation as verifyAndroidAttestationLib,
 } from '@identity-backend/android-attest'
-import { ChallengeService } from '@identity-backend/auth/services'
+import { AuthService, ChallengeService } from '@identity-backend/auth/services'
+import { DB } from '@identity-backend/db'
+import { bridgeSpanContext } from '@identity-backend/observability'
 import type { SpanContext } from '@opentelemetry/api'
 import { decodeBase64, encodeBase64 } from '@std/encoding'
-import { Cause, Config, Effect, Exit, Match, Redacted, Runtime, Schema as S } from 'effect'
+import { Cause, Config, Effect, Either, Exit, Match, Redacted, Runtime, Schema as S } from 'effect'
 import { decideKeyAttestationDispatch } from './key-attestation-dispatch.workflow.js'
 import { RefreshTokenRequest, RefreshTokenResponse, TokenRequest, TokenRequestHeaders, TokenResponse } from './types.js'
+import { redeemVoucher } from './voucher-redemption.executor.js'
 
 class AndroidAttestationRateLimitExceededError
   extends S.TaggedError<AndroidAttestationRateLimitExceededError>()('AndroidAttestationRateLimitExceededError', {})
@@ -170,12 +173,15 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
   const challengeService = yield* ChallengeService
   const crlService = yield* AndroidAttestationCrlService
   const rateLimiter = yield* TokenBucketRateLimiter
+  const authService = yield* AuthService
+  const db = yield* DB
   const runtime = yield* Effect.runtime()
 
-  const [packageNames, playStoreDigest, websiteDigest] = yield* Config.all([
+  const [packageNames, playStoreDigest, websiteDigest, rootPems] = yield* Config.all([
     ANDROID_PACKAGE_NAMES,
     ANDROID_SIGNING_DIGEST_PLAYSTORE,
     ANDROID_SIGNING_DIGEST_WEBSITE,
+    ANDROID_ATTESTATION_ROOT_PEMS,
   ])
 
   const knownDigests = {
@@ -203,6 +209,7 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
         crlEntries,
         knownDigests,
         trustedVerifiedBootKeys: GRAPHENEOS_VERIFIED_BOOT_KEYS,
+        googleRootPems: rootPems,
       })({
         leafCertDer: params.leafCertDer,
         intermediateCertDers: params.intermediateCertDers,
@@ -279,6 +286,14 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
             description:
               'Android attestation verification failed (chain invalid, revoked cert, boot integrity, etc.) or rate limit exceeded.',
           },
+          409: {
+            content: {
+              'application/problem+json': {
+                schema: ProblemDetailZod,
+              },
+            },
+            description: 'Voucher already redeemed. The secret was valid but has already been used (single-use).',
+          },
           429: {
             content: {
               'text/plain': {
@@ -316,12 +331,20 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
           const dispatch = yield* decideKeyAttestationDispatch({
             attestationType: headers.authAttestationType,
             attestationChain: body.attestationChain,
+            voucherSecret: headers.voucherSecret,
           })
 
-          const attestationResult = yield* Match.value(dispatch).pipe(
+          // Each branch resolves to one of two states: `Right` carries the
+          // attestation result for the shared issuance step below; `Left`
+          // carries an already-issued token, because the voucher flow has to
+          // issue inside its own transaction (see the RedeemVoucher branch).
+          const issuedOrPending: Either.Either<
+            { readonly appFromOfficialStore: boolean } | undefined,
+            { readonly token: string; readonly refreshToken: string }
+          > = yield* Match.value(dispatch).pipe(
             Match.tag(
               'SkipKeyAttestationChain',
-              () => Effect.succeed<{ readonly appFromOfficialStore: boolean } | undefined>(undefined),
+              () => Effect.succeed(Either.right(undefined)),
             ),
             Match.tag('VerifyKeyAttestationChain', (verify) =>
               Effect.gen(function*() {
@@ -348,21 +371,36 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
                   intermediateCertDers: intermediateBytes.map(toArrayBuffer),
                 })
 
-                return { appFromOfficialStore: verifyResult.appFromOfficialStore }
+                return Either.right({ appFromOfficialStore: verifyResult.appFromOfficialStore })
               })),
+            Match.tag('RedeemVoucher', (redeem) =>
+              redeemVoucher({
+                secret: redeem.secret,
+                clientId: headers.clientId,
+                clientProof: headers.clientProof,
+                challenge: headers.challenge,
+                body: bodyBytes,
+                iosPackage: headers.iosPackage,
+              }).pipe(Effect.map(Either.left))),
             Match.exhaustive,
           )
 
-          const cmd = yield* S.decode(IssueTokenCommand)({
-            clientId: headers.clientId,
-            clientProof: headers.clientProof,
-            challenge: headers.challenge,
-            body: bodyBytes,
-            attestationResult,
-            iosPackage: headers.iosPackage,
-          }).pipe(Effect.orDie)
+          const tokenResult = yield* Either.match(issuedOrPending, {
+            onLeft: (token) => Effect.succeed(token),
+            onRight: (attestationResult) =>
+              Effect.gen(function*() {
+                const cmd = yield* S.decode(IssueTokenCommand)({
+                  clientId: headers.clientId,
+                  clientProof: headers.clientProof,
+                  challenge: headers.challenge,
+                  body: bodyBytes,
+                  attestationResult,
+                  iosPackage: headers.iosPackage,
+                }).pipe(Effect.orDie)
 
-          const tokenResult = yield* issueTokenUseCase.issueToken(cmd)
+                return yield* issueTokenUseCase.issueToken(cmd)
+              }),
+          })
           return c.json(tokenResult, 200)
         }).pipe(
           Effect.catchTag('ClientProofVerificationFailedError', () =>
@@ -380,6 +418,38 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
               ),
             )),
           Effect.catchTags({
+            VoucherSecretRequired: () =>
+              Effect.succeed(c.json(
+                buildProblemBody(
+                  'Voucher Secret Required',
+                  'Auth-Attestation-Type: voucher requires the Auth-Voucher-Secret header.',
+                  400,
+                ),
+                400,
+                { 'Content-Type': 'application/problem+json' },
+              )),
+            InvalidVoucherError: () =>
+              Effect.succeed(c.json(
+                {
+                  type: `${SMARTBEAR}/unauthorized`,
+                  title: 'Invalid Voucher',
+                  detail: 'The provided voucher secret is unknown or malformed.',
+                  status: 401,
+                } satisfies ProblemDetail,
+                401,
+                { 'Content-Type': 'application/problem+json' },
+              )),
+            VoucherAlreadyRedeemedError: () =>
+              Effect.succeed(c.json(
+                buildProblemDetail({
+                  slug: 'already-exists',
+                  title: 'Voucher Already Redeemed',
+                  detail: 'The provided voucher secret has already been redeemed.',
+                  status: 409,
+                }),
+                409,
+                { 'Content-Type': 'application/problem+json' },
+              )),
             AndroidAttestationRateLimitExceededError: () => Effect.succeed(c.text('Rate Limit Exceeded', 429)),
             AttestationChainRequired: () =>
               Effect.succeed(c.json(
@@ -405,9 +475,9 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
             CertificateRevokedError: (e) => Effect.succeed(c.json(toAndroidAttestationProblemBody(e), 403)),
             AttestationStatementError: (e) => Effect.succeed(c.json(toAndroidAttestationProblemBody(e), 403)),
             AppDistributionError: (e) => Effect.succeed(c.json(toAndroidAttestationProblemBody(e), 403)),
-            ChallengeNotFoundError: () =>
+            ChallengeRejectedError: () =>
               Effect.succeed(c.json(
-                buildProblemBody('Challenge Not Found', 'Challenge not found, expired, or already consumed'),
+                buildProblemBody('Challenge Rejected', 'Challenge is invalid or has expired'),
                 403,
                 { 'Content-Type': 'application/problem+json' },
               )),
@@ -433,6 +503,9 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
               )),
           }),
           Effect.withSpan('v1.generate_token'),
+          Effect.provideService(DB, db),
+          Effect.provideService(AuthService, authService),
+          Effect.provideService(IssueTokenUseCase, issueTokenUseCase),
         )
 
         const result = await bridgeSpanContext(handler, c).pipe(

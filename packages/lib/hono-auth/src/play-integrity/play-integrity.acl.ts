@@ -38,6 +38,8 @@ const VerdictListField = <A extends string>(literal: S.Schema<A, A, never>) =>
 const PlayIntegrityTokenForeign = S.Struct({
   appIntegrity: S.optional(S.Struct({
     appRecognitionVerdict: S.optional(VerdictField(AppRecognitionVerdict)),
+    certificateSha256Digest: S.optional(S.NullishOr(S.Array(S.String))),
+    packageName: S.optional(S.NullishOr(S.String)),
   })),
   deviceIntegrity: S.optional(S.Struct({
     deviceRecognitionVerdict: S.optional(VerdictListField(DeviceRecognitionVerdict)),
@@ -57,6 +59,8 @@ export const PlayIntegrityTokenAcl = S.transformOrFail(
         appRecognitionVerdict: fromA.appIntegrity?.appRecognitionVerdict ?? null,
         deviceRecognitionVerdict: fromA.deviceIntegrity?.deviceRecognitionVerdict ?? null,
         appLicensingVerdict: fromA.accountDetails?.appLicensingVerdict ?? null,
+        certificateSha256Digest: fromA.appIntegrity?.certificateSha256Digest ?? null,
+        packageName: fromA.appIntegrity?.packageName ?? null,
       }),
     encode: (_toI, _options, ast, _toA) =>
       Effect.fail(new ParseResult.Forbidden(ast, null, 'PlayIntegrityTokenAcl is decode-only')),

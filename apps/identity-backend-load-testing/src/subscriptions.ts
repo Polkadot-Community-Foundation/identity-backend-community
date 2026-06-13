@@ -1,6 +1,7 @@
-import { check, group } from 'k6'
-import http from 'k6/http'
+import { check } from 'k6'
 import { generateJwtPool } from './lib/jwt'
+import { observedGet, observedPost } from './lib/observed-http'
+import { endRun, type RunContext, startRun } from './lib/run-lifecycle'
 
 const BASE_URL = __ENV.BASE_URL || 'http://localhost:8080'
 const JWT_SECRET = __ENV.JWT_SECRET || 'test-secret'
@@ -28,51 +29,54 @@ export const options = {
     },
   },
   thresholds: {
-    http_req_duration: ['p(95)<500', 'p(99)<1500'],
-    http_req_failed: ['rate<0.01'],
+    checks: ['rate>0.99'],
+    'http_req_failed{endpoint:subscriptions_create}': ['rate<0.01'],
+    'http_req_failed{endpoint:subscriptions_list}': ['rate<0.01'],
+    'server_processing_time{endpoint:subscriptions_create}': ['p(95)<500', 'p(99)<1500'],
+    'server_processing_time{endpoint:subscriptions_list}': ['p(95)<500', 'p(99)<1500'],
   },
 }
 
-export default function() {
-  const jwt = JWT_POOL[Math.floor(Math.random() * JWT_POOL.length)]!
+export function setup(): RunContext {
+  return startRun(BASE_URL, false)
+}
 
-  group('create_subscription', () => {
-    const payload = JSON.stringify({
+export default function(ctx: RunContext) {
+  const jwt = JWT_POOL[Math.floor(Math.random() * JWT_POOL.length)]!
+  const auth = { Authorization: `Bearer ${jwt.token}` }
+
+  const createRes = observedPost(`${ctx.baseUrl}/api/v1/subscriptions`, {
+    scenario: 'subscriptions',
+    endpoint: 'subscriptions_create',
+    headers: { ...auth, 'Content-Type': 'application/json' },
+    body: JSON.stringify({
       notificationType: 'fcm',
       token: `test-token-${Math.random().toString(36).substring(2, 10)}`,
-    })
-
-    const res = http.post(`${BASE_URL}/api/v1/subscriptions`, payload, {
-      headers: {
-        Authorization: `Bearer ${jwt.token}`,
-        'Content-Type': 'application/json',
-      },
-      tags: { group: 'create_subscription', endpoint: 'subscriptions_create' },
-    })
-
-    check(res, {
-      'create subscription 201 (created) or 200 (updated)': (r) => r.status === 201 || r.status === 200,
-    })
+    }),
   })
 
-  group('list_subscriptions', () => {
-    const res = http.get(`${BASE_URL}/api/v1/subscriptions`, {
-      headers: {
-        Authorization: `Bearer ${jwt.token}`,
-      },
-      tags: { group: 'list_subscriptions', endpoint: 'subscriptions_list' },
-    })
+  check(createRes, {
+    'create subscription 201 (created) or 200 (updated)': (r) => r.status === 201 || r.status === 200,
+  }, { scenario: 'subscriptions', endpoint: 'subscriptions_create' })
 
-    check(res, {
-      'list subscriptions status 200': (r) => r.status === 200,
-      'list subscriptions returns array': (r) => {
-        try {
-          const data = r.json() as unknown as Array<Record<string, unknown>>
-          return Array.isArray(data)
-        } catch {
-          return false
-        }
-      },
-    })
+  const listRes = observedGet(`${ctx.baseUrl}/api/v1/subscriptions`, {
+    scenario: 'subscriptions',
+    endpoint: 'subscriptions_list',
+    headers: auth,
   })
+
+  check(listRes, {
+    'list subscriptions status 200': (r) => r.status === 200,
+    'list subscriptions returns array': (r) => {
+      try {
+        return Array.isArray(r.json() as unknown as Array<Record<string, unknown>>)
+      } catch {
+        return false
+      }
+    },
+  }, { scenario: 'subscriptions', endpoint: 'subscriptions_list' })
+}
+
+export function teardown(ctx: RunContext) {
+  endRun(ctx, 'subscriptions')
 }

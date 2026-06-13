@@ -2,7 +2,6 @@ import { PEOPLE_NETWORK } from '#root/config.js'
 import { DimTicketShell } from '#root/features/dim/dim-ticket.shell.js'
 import { createOpenAPIHono, ProblemDetailWithErrorsZod, problemResponse } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
 import { createRoute, z } from '@hono/zod-openapi'
 import {
   FailedTicket,
@@ -11,6 +10,7 @@ import {
   SubmittedTicket,
   SubmittingTicket,
 } from '@identity-backend/dim-ticket'
+import { bridgeSpanContext } from '@identity-backend/observability'
 import { Cause, Clock, Effect, Exit, Match, Runtime } from 'effect'
 import { DIMTicketCreateResponse, RequestTicketBody, TicketResponse } from './dim-ticket.schema.js'
 
@@ -180,7 +180,6 @@ const requestTicketRoute = createRoute({
         'application/json': {
           schema: z.object({
             error: z.string(),
-            available: z.number().openapi({ description: 'Number of available invites' }),
           }),
         },
       },
@@ -256,10 +255,9 @@ export const makeDIMTicketRouteWithoutDependencies = Effect.gen(function*() {
         }),
         Effect.catchTags({
           DimTicketAlreadyExistsError: () => Effect.succeed(c.json({ error: 'Ticket already exists' }, 409)),
-          DimTicketQuotaExceededError: (err) =>
+          DimTicketQuotaExceededError: () =>
             Effect.succeed(c.json({
               error: 'No available invites',
-              available: err.available,
             }, 422)),
         }),
         Effect.withSpan('v1.create_dim_ticket'),

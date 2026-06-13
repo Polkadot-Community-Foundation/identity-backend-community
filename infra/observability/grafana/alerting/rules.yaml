@@ -1,0 +1,260 @@
+apiVersion: 1
+
+groups:
+  - orgId: 1
+    name: identity-backend
+    folder: identity-backend
+    interval: 1m
+    rules:
+      - uid: registration_p95_sla_breach
+        title: Registration p95 latency > 90s for 10m
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          severity: critical
+          service: identity-backend
+          business_kpi: username_registration
+        annotations:
+          summary: Users are waiting more than 90s to register a username — SLA breach
+          description: |
+            p95 e2e registration latency (sign → ASSIGNED) has been above 90s for 10 minutes.
+            Likely causes: chain finalization lag, daemon tick failures, queue depth saturation.
+            Check: Chain finalization panel, Daemon tick failures, Queue depth.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: histogram_quantile(0.95, sum(rate(app_people_username_e2e_duration_bucket[5m])) by (le))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [90] }
+
+      - uid: registrations_fully_stopped
+        title: No registrations completing for 5m
+        condition: C
+        for: 5m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels:
+          severity: critical
+          service: identity-backend
+          business_kpi: username_registration
+        annotations:
+          summary: Zero username registrations completing — business is down
+          description: |
+            No `item_completed` registrations for 5 minutes. Either the daemon is stuck,
+            the queue is empty because intakes are broken, or the chain is rejecting all submissions.
+            Check: Intake outcomes panel, Daemon heartbeat/leader, Chain finalized block height.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(rate(app_people_username_registrations_completed_total{completion="item_completed"}[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [0.01] }
+
+      - uid: registration_failure_storm
+        title: Registration failures > 1/s for 10m
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          severity: critical
+          service: identity-backend
+          business_kpi: username_registration
+        annotations:
+          summary: Sustained registration failures — likely chain-side or daemon-side regression
+          description: |
+            More than 1 terminal registration failure per second for 10 minutes.
+            Inspect the failure-mode breakdown panel to see if failures are
+            terminal, submit_error, finalization_timeout, or tx_not_included.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(rate(app_people_username_registrations_failed_total[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [1] }
+
+      - uid: http_5xx_ratio_high
+        title: HTTP 5xx ratio > 5% for 5m
+        condition: C
+        for: 5m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          severity: critical
+          service: identity-backend
+        annotations:
+          summary: 5xx error ratio above 5% for 5 minutes
+          description: More than 5% of HTTP requests are returning 5xx. Check the app logs.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(rate(http_server_request_count_total{http_response_status_code=~"5.."}[5m])) / clamp_min(sum(rate(http_server_request_count_total[5m])), 1)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [0.05] }
+
+      - uid: registration_queue_saturated
+        title: Registration queue depth > 100
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          severity: warning
+          service: identity-backend
+        annotations:
+          summary: Queue backing up — daemon is not draining
+          description: |
+            More than 100 rows waiting in the registration queue for 10 minutes.
+            Daemon is either starved (chain lag) or stuck. Check daemon tick failures and
+            chain finalization p95.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(app_queue_depth)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [100] }
+
+      - uid: registration_daemon_heartbeat_lost
+        title: Registration daemon heartbeat lost
+        condition: C
+        for: 2m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels:
+          severity: critical
+          service: identity-backend
+        annotations:
+          summary: Registration daemon has not reported a heartbeat in 2 minutes
+          description: |
+            The username registration daemon's heartbeat gauge is 0 — the daemon
+            has not completed a tick within the last 2× tickTimeout. Either it has
+            crashed, the leader lock was lost, or the process is wedged.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: min(app_people_username_daemon_heartbeat)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: chain_stalled
+        title: Chain not finalizing blocks
+        condition: C
+        for: 3m
+        noDataState: Alerting
+        execErrState: Alerting
+        labels:
+          severity: critical
+          service: identity-backend
+        annotations:
+          summary: Finalized block height not advancing
+          description: |
+            `blockchain_finalized_block` has not increased in 3 minutes. The chain is
+            stalled or our RPC subscription is broken. Registrations will queue up
+            and time out.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: max(blockchain_finalized_block)
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: lt, params: [1] }
+
+      - uid: rate_limit_429_surge
+        title: Sustained 429 rate-limit responses
+        condition: C
+        for: 10m
+        noDataState: OK
+        execErrState: Alerting
+        labels:
+          severity: warning
+          service: identity-backend
+        annotations:
+          summary: Sustained rate-limit blocks — investigate abuse or misconfigured profile
+          description: More than 5 req/s blocked at the origin for 10 minutes.
+        data:
+          - refId: A
+            relativeTimeRange: { from: 600, to: 0 }
+            datasourceUid: prometheus
+            model:
+              refId: A
+              instant: true
+              expr: sum(rate(app_rate_limit_decisions_total{outcome="blocked"}[5m]))
+          - refId: C
+            datasourceUid: __expr__
+            model:
+              refId: C
+              type: threshold
+              expression: A
+              conditions:
+                - evaluator: { type: gt, params: [5] }

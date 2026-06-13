@@ -1,0 +1,14 @@
+{
+  "extends": "../tsconfig.json",
+  "compilerOptions": {
+    "noEmit": true,
+    "allowJs": true,
+    "moduleResolution": "Bundler",
+    "skipLibCheck": true,
+    "lib": ["ESNext"],
+    "target": "ESNext",
+    "types": ["node"]
+  },
+  "include": ["../.sst/platform/config.d.ts", "**/*.ts", "../sst.config.ts"],
+  "exclude": ["../.sst/**/src/**"]
+}

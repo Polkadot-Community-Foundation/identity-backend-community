@@ -1,6 +1,6 @@
 import { it } from '@effect/vitest'
 import { VerifyAttestationError } from '@identity-backend/app-attest/Attestation'
-import { AppAttestError, ChallengeNotFoundError } from '@identity-backend/auth/services'
+import { AppAttestError, ChallengeRejectedError } from '@identity-backend/auth/services'
 import { checkResponse } from '@identity-backend/testing/hono'
 import { encodeBase64 } from '@std/encoding'
 import { Effect, Layer, pipe } from 'effect'
@@ -14,7 +14,6 @@ describe('AuthRoutes', () => {
   const textEncoder = new TextEncoder()
   const makeChallenge = vi.fn<AuthRoutesConfig['Type']['makeChallenge']>()
   const verifyAttestation = vi.fn<AuthRoutesConfig['Type']['verifyAttestation']>()
-  const persistChallenge = vi.fn<AuthRoutesConfig['Type']['persistChallenge']>()
   const persistAttestation = vi.fn<AuthRoutesConfig['Type']['persistAttestation']>()
 
   const createPublicKey = Effect.promise(async () => {
@@ -35,7 +34,6 @@ describe('AuthRoutes', () => {
     {
       makeChallenge,
       verifyAttestation,
-      persistChallenge,
       persistAttestation,
     },
   )
@@ -43,7 +41,6 @@ describe('AuthRoutes', () => {
   afterEach(() => {
     makeChallenge.mockReset()
     verifyAttestation.mockReset()
-    persistChallenge.mockReset()
     persistAttestation.mockReset()
   })
 
@@ -59,7 +56,7 @@ describe('AuthRoutes', () => {
   })
 
   describe('/challenges', () => {
-    it.effect('Should_CreateAndPersistChallenge_When_ValidRequest', (c) =>
+    it.effect('Should_CreateChallenge_When_ValidRequest', (c) =>
       Effect.gen(function*() {
         const client = yield* makeClient
 
@@ -67,7 +64,6 @@ describe('AuthRoutes', () => {
           Effect.sync(() => textEncoder.encode('testChallenge')),
           Effect.tap((c) => {
             makeChallenge.mockImplementation(() => Effect.succeed(c))
-            persistChallenge.mockImplementation(() => Effect.void)
           }),
         )
 
@@ -75,7 +71,7 @@ describe('AuthRoutes', () => {
         checkResponse(res, 201)
         const resBody = yield* Effect.promise(() => res.json())
         c.expect(resBody).toEqual({ challenge: encodeBase64(challenge) })
-        c.expect(persistChallenge).toHaveBeenCalledWith(challenge)
+        c.expect(makeChallenge).toHaveBeenCalled()
       }).pipe(
         Effect.provide(config),
       ))
@@ -164,7 +160,7 @@ describe('AuthRoutes', () => {
             return { publicKey, receipt: new Uint8Array([2]) }
           })
         )
-        persistAttestation.mockImplementation(() => Effect.fail(ChallengeNotFoundError.make()))
+        persistAttestation.mockImplementation(() => Effect.fail(ChallengeRejectedError.make({ reason: 'expired' })))
 
         const res = yield* Effect.promise(() =>
           client['app-attest'].attestations.$post({

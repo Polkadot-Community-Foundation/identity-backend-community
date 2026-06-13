@@ -1,24 +1,31 @@
 import { DeviceCheckService } from '@identity-backend/auth/services'
 import { Effect, Either, Runtime } from 'effect'
-
 import { decodeBase64 } from 'effect/Encoding'
 import {
+  decideDeviceCheckGate,
   DeviceCheckAlreadyUsed,
   DeviceCheckAvailable,
+  type DeviceCheckDecision,
   DeviceCheckFailed,
   DeviceCheckInactive,
-  type DeviceCheckVariables,
-  IOS_DEVICE_TOKEN_VAR,
-} from './types.js'
+} from './gate.workflow.js'
 
-export const makeDeviceCheckMiddleware = (config: { readonly headerName: string }) =>
+export const DEVICE_CHECK_DECISION_VAR = 'deviceCheckDecision' as const
+
+export type DeviceCheckVariables = {
+  readonly [DEVICE_CHECK_DECISION_VAR]: DeviceCheckDecision
+}
+
+export const makeDeviceCheckMiddleware = (
+  config: { readonly headerName: string; readonly enforceAuth: boolean },
+) =>
   Effect.gen(function*() {
     const { createMiddleware } = yield* Effect.promise(() => import('hono/factory'))
     const deviceCheck = yield* DeviceCheckService
     const runtime = yield* Effect.runtime()
 
     return createMiddleware<{ Variables: DeviceCheckVariables }>(async (c, next) => {
-      const outcome = await Effect.gen(function*() {
+      const verdict = await Effect.gen(function*() {
         const deviceToken = c.req.header(config.headerName)
         if (!deviceToken) return new DeviceCheckInactive({})
 
@@ -34,7 +41,12 @@ export const makeDeviceCheckMiddleware = (config: { readonly headerName: string 
         Runtime.runPromise(runtime),
       )
 
-      c.set(IOS_DEVICE_TOKEN_VAR, outcome)
-      return await next()
+      return Either.match(decideDeviceCheckGate({ verdict, enforced: config.enforceAuth }), {
+        onLeft: () => c.json({ error: 'iOS DeviceCheck verification failed' }, 502),
+        onRight: (decision) => {
+          c.set(DEVICE_CHECK_DECISION_VAR, decision)
+          return next()
+        },
+      })
     })
   })

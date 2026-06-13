@@ -1,7 +1,7 @@
 import type { VerifyAssertion, VerifyAttestation } from '@identity-backend/app-attest'
 import { Context, Effect } from 'effect'
 import { AuthService } from '../auth-service.js'
-import { AppAttestationData, AppAttestRepository, ChallengeNotFoundError, ChallengeService } from '../mod.js'
+import { AppAttestationData, AppAttestRepository, ChallengeRejectedError, ChallengeService } from '../mod.js'
 import { AppAttestError } from './types.js'
 
 export class AppAttestServiceConfig extends Context.Tag('AppAttestServiceConfig')<
@@ -29,7 +29,7 @@ export namespace AppAttestService {
     verifyAssertion: (params: VerifyAssertionParams) => Effect.Effect<number, AppAttestError>
     persistAttestation: (
       params: PersistAttestationParams,
-    ) => Effect.Effect<void, ChallengeNotFoundError | AppAttestError>
+    ) => Effect.Effect<void, ChallengeRejectedError | AppAttestError>
   }
 }
 
@@ -44,10 +44,10 @@ export class AppAttestService extends Effect.Service<AppAttestService>()(
         verifyAssertion: makeVerifyAssertion,
         verifyAttestation: makeVerifyAttestation,
       } = yield* Effect.promise(() => import('@identity-backend/app-attest'))
-      const { appIds } = yield* AppAttestServiceConfig
+      const { appIds, rootCert } = yield* AppAttestServiceConfig
 
       const verifyAttestation = (Effect.fn('app_attest.verifyAttestation')((params) =>
-        makeVerifyAttestation({ appIds })(params)
+        makeVerifyAttestation({ appIds, ...(rootCert === undefined ? {} : { rootCert }) })(params)
           .pipe(Effect.mapError((cause) =>
             AppAttestError.make({ cause })
           ))
@@ -65,9 +65,7 @@ export class AppAttestService extends Effect.Service<AppAttestService>()(
           yield* repository.create(params.attestation).pipe(
             Effect.mapError((err) => AppAttestError.make({ cause: err })),
           )
-          yield* challengeService.consumeChallenge(params.challenge).pipe(
-            Effect.catchTag('ConsumeChallengeError', (cause) => Effect.fail(AppAttestError.make({ cause }))),
-          )
+          yield* challengeService.consumeChallenge(params.challenge)
         },
       )) satisfies AppAttestService.AppAttestService['persistAttestation']
 

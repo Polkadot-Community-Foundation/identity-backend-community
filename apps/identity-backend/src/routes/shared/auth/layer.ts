@@ -11,7 +11,6 @@ export const layerAuthRoutes = Layer.unwrapEffect(Effect.gen(function*() {
     {
       makeChallenge: challengeService.makeChallenge,
       verifyAttestation: appAttestService.verifyAttestation,
-      persistChallenge: challengeService.persistChallenge,
       persistAttestation: appAttestService.persistAttestation,
     } satisfies AuthRoutesConfig['Type'],
   )

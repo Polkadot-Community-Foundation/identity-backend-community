@@ -8,15 +8,12 @@ import {
   dotnsGatewayReserveOperationsFailureCounter,
   dotnsGatewayReserveOperationsTotalCounter,
 } from '#root/metrics/dotns-gateway.js'
-import {
-  peopleRegisterUsernamesOperationsFailureCounter,
-  peopleRegisterUsernamesOperationsTotalCounter,
-} from '#root/metrics/people.js'
-
 import { DotnsReservationWorker, PeopleLiteAttestationWorker } from './workers/mod.js'
 
 export interface LiteUsernameRegistrationSupervisorRuntimeConfig {
   readonly backoffMaxDelay: Duration.Duration
+  readonly pollInterval: Duration.Duration
+  readonly tickOverhead: Duration.Duration
 }
 
 export class LiteUsernameRegistrationSupervisorConfig
@@ -25,10 +22,18 @@ export class LiteUsernameRegistrationSupervisorConfig
     {
       defaultValue: (): LiteUsernameRegistrationSupervisorRuntimeConfig => ({
         backoffMaxDelay: Duration.seconds(10),
+        pollInterval: Duration.seconds(6),
+        tickOverhead: Duration.seconds(25),
       }),
     },
   )
 {}
+
+const tickTimeoutFrom = (
+  cfg: LiteUsernameRegistrationSupervisorRuntimeConfig,
+  inclusion: Duration.Duration,
+  finalization: Duration.Duration,
+): Duration.Duration => Duration.sum(Duration.sum(inclusion, finalization), cfg.tickOverhead)
 
 export class LiteUsernameRegistrationSupervisor extends Effect.Service<LiteUsernameRegistrationSupervisor>()(
   'identity-backend-container/LiteUsernameRegistrationSupervisor',
@@ -64,31 +69,34 @@ export class LiteUsernameRegistrationSupervisor extends Effect.Service<LiteUsern
         PeopleLiteAttestationWorker.PeopleLiteAttestationWorkerConfig,
         Effect.gen(function*() {
           const {
-            SET_USERNAME_FOR_TIMEOUT,
             REGISTER_USERNAME_BATCH_SIZE,
+            TX_INCLUSION_TIMEOUT,
+            PEOPLE_CHAIN_FINALIZATION_TIMEOUT,
             PROXY_PRIVATE_KEY,
             PROXY_DELEGATION_ENABLED,
             ATTESTER_PUBLIC_KEY,
             ATTESTER_PROXY_PRIVATE_KEY,
           } = yield* Effect.promise(() => import('#root/config.js'))
 
+          const supervisorCfg = yield* LiteUsernameRegistrationSupervisorConfig
           const proxyDelegationEnabled = yield* PROXY_DELEGATION_ENABLED
           const proxyKeypair = yield* sr25519.fromPrivateKey({ privateKey: yield* PROXY_PRIVATE_KEY })
           const attesterSignerKeypair = proxyDelegationEnabled
             ? yield* sr25519.fromPrivateKey({ privateKey: yield* ATTESTER_PROXY_PRIVATE_KEY })
             : proxyKeypair
           const attesterPublicKey = yield* ATTESTER_PUBLIC_KEY
+          const inclusionTimeout = yield* TX_INCLUSION_TIMEOUT
+          const finalizationTimeout = yield* PEOPLE_CHAIN_FINALIZATION_TIMEOUT
 
           return {
-            operationsTotalCounter: peopleRegisterUsernamesOperationsTotalCounter,
-            operationsFailuresCounter: peopleRegisterUsernamesOperationsFailureCounter,
-            submitTimeout: yield* SET_USERNAME_FOR_TIMEOUT,
+            inclusionTimeout,
+            finalizationTimeout,
             batchSize: yield* REGISTER_USERNAME_BATCH_SIZE,
             keypair: attesterSignerKeypair,
             proxyDelegationEnabled,
             attesterPublicKey,
-            pollInterval: Duration.seconds(6),
-            tickTimeout: Duration.seconds(90),
+            pollInterval: supervisorCfg.pollInterval,
+            tickTimeout: tickTimeoutFrom(supervisorCfg, inclusionTimeout, finalizationTimeout),
           }
         }),
       ),
@@ -97,7 +105,8 @@ export class LiteUsernameRegistrationSupervisor extends Effect.Service<LiteUsern
         Effect.gen(function*() {
           const {
             DOTNS_GATEWAY_ENABLED,
-            DOTNS_RESERVE_SUBMIT_TIMEOUT,
+            DOTNS_RESERVE_INCLUSION_TIMEOUT,
+            ASSET_HUB_FINALIZATION_TIMEOUT,
             DOTNS_RESERVE_BATCH_SIZE,
             DOTNS_SIGNED_AT_SAFETY_MARGIN_SECONDS,
             PROXY_PRIVATE_KEY,
@@ -106,6 +115,7 @@ export class LiteUsernameRegistrationSupervisor extends Effect.Service<LiteUsern
             ATTESTER_PROXY_PRIVATE_KEY,
           } = yield* Effect.promise(() => import('#root/config.js'))
 
+          const supervisorCfg = yield* LiteUsernameRegistrationSupervisorConfig
           const dotnsGatewayEnabled = yield* DOTNS_GATEWAY_ENABLED
           const proxyDelegationEnabled = yield* PROXY_DELEGATION_ENABLED
           const proxyKeypair = yield* sr25519.fromPrivateKey({ privateKey: yield* PROXY_PRIVATE_KEY })
@@ -113,18 +123,21 @@ export class LiteUsernameRegistrationSupervisor extends Effect.Service<LiteUsern
             ? yield* sr25519.fromPrivateKey({ privateKey: yield* ATTESTER_PROXY_PRIVATE_KEY })
             : proxyKeypair
           const attesterPublicKey = yield* ATTESTER_PUBLIC_KEY
+          const inclusionTimeout = yield* DOTNS_RESERVE_INCLUSION_TIMEOUT
+          const finalizationTimeout = yield* ASSET_HUB_FINALIZATION_TIMEOUT
 
           return {
             dotnsGatewayEnabled,
             operationsTotalCounter: dotnsGatewayReserveOperationsTotalCounter,
             operationsFailuresCounter: dotnsGatewayReserveOperationsFailureCounter,
-            submitTimeout: yield* DOTNS_RESERVE_SUBMIT_TIMEOUT,
+            inclusionTimeout,
+            finalizationTimeout,
             batchSize: yield* DOTNS_RESERVE_BATCH_SIZE,
             keypair: attesterSignerKeypair,
             proxyDelegationEnabled,
             attesterPublicKey,
-            pollInterval: Duration.seconds(6),
-            tickTimeout: Duration.seconds(90),
+            pollInterval: supervisorCfg.pollInterval,
+            tickTimeout: tickTimeoutFrom(supervisorCfg, inclusionTimeout, finalizationTimeout),
             signedAtSafetyMarginSeconds: yield* DOTNS_SIGNED_AT_SAFETY_MARGIN_SECONDS,
           }
         }),

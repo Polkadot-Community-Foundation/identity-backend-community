@@ -1,4 +1,4 @@
-import { Either, Schema as S } from 'effect'
+import { Either, Match, Option, Schema as S } from 'effect'
 
 const KeyAttestationDispatchTypeId: unique symbol = Symbol.for(
   '@identity-backend/token/KeyAttestationDispatch',
@@ -21,7 +21,16 @@ export class SkipKeyAttestationChain extends S.TaggedClass<SkipKeyAttestationCha
   readonly [KeyAttestationDispatchTypeId] = KeyAttestationDispatchTypeId
 }
 
-export type KeyAttestationDispatch = VerifyKeyAttestationChain | SkipKeyAttestationChain
+export class RedeemVoucher extends S.TaggedClass<RedeemVoucher>()(
+  'RedeemVoucher',
+  {
+    secret: S.String,
+  },
+) {
+  readonly [KeyAttestationDispatchTypeId] = KeyAttestationDispatchTypeId
+}
+
+export type KeyAttestationDispatch = VerifyKeyAttestationChain | SkipKeyAttestationChain | RedeemVoucher
 
 export class AttestationChainRequiredError extends S.TaggedError<AttestationChainRequiredError>()(
   'AttestationChainRequired',
@@ -33,25 +42,46 @@ export class AttestationChainUnexpectedError extends S.TaggedError<AttestationCh
   {},
 ) {}
 
+export class VoucherSecretRequiredError extends S.TaggedError<VoucherSecretRequiredError>()(
+  'VoucherSecretRequired',
+  {},
+) {}
+
 export type AttestationChainContractViolation =
   | AttestationChainRequiredError
   | AttestationChainUnexpectedError
+  | VoucherSecretRequiredError
 
 export interface KeyAttestationDispatchInput {
-  readonly attestationType: 'play-integrity' | 'key-attestation' | undefined
+  readonly attestationType: 'play-integrity' | 'key-attestation' | 'voucher' | undefined
   readonly attestationChain: ReadonlyArray<string> | undefined
+  readonly voucherSecret: string | undefined
 }
 
-export const decideKeyAttestationDispatch = (
-  input: KeyAttestationDispatchInput,
-): Either.Either<KeyAttestationDispatch, AttestationChainContractViolation> => {
-  if (input.attestationType === 'key-attestation') {
-    return input.attestationChain === undefined
-      ? Either.left(new AttestationChainRequiredError())
-      : Either.right(new VerifyKeyAttestationChain({ chain: input.attestationChain }))
-  }
+type Decision = Either.Either<KeyAttestationDispatch, AttestationChainContractViolation>
 
-  return input.attestationChain === undefined
-    ? Either.right(new SkipKeyAttestationChain())
-    : Either.left(new AttestationChainUnexpectedError())
-}
+const dispatchVoucher = (voucherSecret: string | undefined): Decision =>
+  Option.match(Option.fromNullable(voucherSecret), {
+    onNone: () => Either.left(new VoucherSecretRequiredError()),
+    onSome: (secret) => Either.right(new RedeemVoucher({ secret })),
+  })
+
+const dispatchKeyAttestation = (attestationChain: ReadonlyArray<string> | undefined): Decision =>
+  Option.match(Option.fromNullable(attestationChain), {
+    onNone: () => Either.left(new AttestationChainRequiredError()),
+    onSome: (chain) => Either.right(new VerifyKeyAttestationChain({ chain })),
+  })
+
+const dispatchUndeclared = (attestationChain: ReadonlyArray<string> | undefined): Decision =>
+  Option.match(Option.fromNullable(attestationChain), {
+    onNone: () => Either.right(new SkipKeyAttestationChain()),
+    onSome: () => Either.left(new AttestationChainUnexpectedError()),
+  })
+
+export const decideKeyAttestationDispatch = (input: KeyAttestationDispatchInput): Decision =>
+  Match.value(input.attestationType).pipe(
+    Match.when('voucher', () => dispatchVoucher(input.voucherSecret)),
+    Match.when('key-attestation', () => dispatchKeyAttestation(input.attestationChain)),
+    Match.when('play-integrity', () => Either.right(new SkipKeyAttestationChain())),
+    Match.orElse(() => dispatchUndeclared(input.attestationChain)),
+  )

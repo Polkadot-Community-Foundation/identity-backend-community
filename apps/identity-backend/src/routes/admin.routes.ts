@@ -1,15 +1,15 @@
 import {
+  ADMIN_PASSWORD,
   ADMIN_ROUTE_ENABLED,
+  ADMIN_USERNAME,
   DEVICE_CHECK_IOS_ENABLED,
   DEVICE_CHECK_RESET_ENABLED,
-  SWAGGER_PASSWORD,
-  SWAGGER_USERNAME,
 } from '#root/config.js'
 import { DB } from '#root/db/drizzle.js'
 import { individualityUsernames, invitationTickets } from '#root/db/schema.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
 import { DeviceCheckService } from '@identity-backend/auth/services'
+import { bridgeSpanContext } from '@identity-backend/observability'
 import { Cause, Clock, Config, Effect, Either, Exit, Option, Redacted, Runtime, Schedule } from 'effect'
 import { decodeBase64 } from 'effect/Encoding'
 import { Hono } from 'hono'
@@ -134,7 +134,7 @@ export const makeDeviceCheckResetRoute = Effect.gen(function* makeDeviceCheckRes
 })
 
 const makeAdminRoutes = Effect.gen(function* makeAdminRoutes() {
-  const [username, password] = yield* Config.all([SWAGGER_USERNAME, SWAGGER_PASSWORD])
+  const [username, password] = yield* Config.all([ADMIN_USERNAME, ADMIN_PASSWORD])
   // Reset is only meaningful when the real iOS DeviceCheck service is wired up.
   // Without that, the default Layer.succeed `reset` is a no-op and a 200 would
   // silently lie to the operator. Require both flags to be true to mount.

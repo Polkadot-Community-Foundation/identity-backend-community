@@ -26,8 +26,8 @@ import {
   SMARTBEAR,
 } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
 import { $, createRoute, z } from '@hono/zod-openapi'
+import { bridgeSpanContext } from '@identity-backend/observability'
 import { Cause, Effect, Either, Exit, Match, Redacted, Runtime as Runtime_, Schema as S } from 'effect'
 import { Encoding } from 'effect'
 import type { Context as HonoContext } from 'hono'

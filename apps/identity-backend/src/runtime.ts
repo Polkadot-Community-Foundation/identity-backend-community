@@ -1,6 +1,6 @@
 import { AccountBalance } from '#root/infrastructure/adapters/blockchain/mod.js'
 import { APNService } from '#root/infrastructure/adapters/notifications/apn/index.js'
-import { HttpMetricsMiddleware, Logger as HonoLoggingMiddleware } from '#root/middleware/mod.js'
+import { GetConnInfo, HttpMetricsMiddleware, Logger as HonoLoggingMiddleware } from '#root/middleware/mod.js'
 import { FetchHttpClient } from '@effect/platform'
 import { AppAttestService, AppAttestServiceConfig, AuthService } from '@identity-backend/auth/services'
 import { sr25519 } from '@identity-backend/crypto'
@@ -10,7 +10,7 @@ import { Config, Duration, Effect, Layer, pipe, PubSub, Random, Redacted } from 
 
 import { LeaderElectionDbLive } from '#root/leader-election/mod.js'
 import * as config from './config.js'
-import { DBLive } from './db/mod.js'
+import { DBLive, EffectSQLDbLive } from './db/mod.js'
 import { ClaimInvitationTicketShell } from './features/dim/claim-invitation-ticket.shell.js'
 import {
   DimTicketBlockchainService,
@@ -53,6 +53,7 @@ import {
   PostgresAdvisoryLeaderLockServiceConfig,
   reaperDaemon,
 } from '#root/leader-election/mod.js'
+import { ChainSubmitter } from './infrastructure/adapters/blockchain/chain-submitter.adapter.js'
 import { DotnsGatewayAPI } from './infrastructure/adapters/blockchain/dotns-gateway.adapter.js'
 import { PeopleChainCodecs } from './infrastructure/adapters/blockchain/people-chain-codecs.service.js'
 import { PeopleAPI } from './infrastructure/adapters/blockchain/people-chain.adapter.js'
@@ -62,8 +63,8 @@ import { UtilityAPI } from './infrastructure/adapters/blockchain/utility-chain.a
 import { FCMPushService } from './infrastructure/adapters/notifications/fcm/index.js'
 import { WebPushService, WebPushServiceConfig } from './infrastructure/adapters/notifications/web/web-push.service.js'
 
+import { ChallengeServiceLive } from './infrastructure/adapters/challenge.service.js'
 import { AppAttestationRepositoryLive } from './infrastructure/adapters/repositories/app-attest.repository.js'
-import { ChallengeServiceLive } from './infrastructure/adapters/repositories/challenge.repository.js'
 import {
   AndroidAttestationCrlServiceConfig,
   AndroidAttestationCrlServiceLive,
@@ -82,6 +83,7 @@ import { layerRx } from './runtime/rx.js'
 import { ChainMetricsSupervisor } from './supervision/chain-metrics/chain-metrics.daemon.js'
 import { DimTicketSupervisor } from './supervision/dim-ticket/mod.js'
 import { LiteUsernameRegistrationSupervisor } from './supervision/lite-username-registration/mod.js'
+import { PgMonitorSupervisor } from './supervision/pg-monitor/mod.js'
 import { InstantClaim, PaymentAddressProvider } from './username-registration/registration-queue/claim-ports.js'
 import { ClaimUsernameExecutorDeps } from './username-registration/registration-queue/claim.executor.js'
 import { EnqueueUsernameRegistrationUseCase } from './username-registration/registration-queue/enqueue.use-case.js'
@@ -137,7 +139,7 @@ const applicationServicesLive = Layer.unwrapEffect(
         dotnsLayers,
       ),
       Layer.mergeAll(UtilityAPI.Default, OnChainTicketAPI.Default),
-    )
+    ).pipe(Layer.provideMerge(ChainSubmitter.Default))
 
     // ── Section 3: Database-dependent services ─────────────────
 
@@ -226,6 +228,7 @@ const applicationServicesLive = Layer.unwrapEffect(
           }),
         ),
         ChainMetricsSupervisor.Default,
+        PgMonitorSupervisor.Default.pipe(Layer.provide(EffectSQLDbLive)),
         EnqueueUsernameRegistrationUseCase.Default,
         RegistrationQueueNetworkConfig.Default,
         RegistrationQueueStatusConfig.Default,
@@ -405,6 +408,7 @@ const applicationServicesLive = Layer.unwrapEffect(
       FCMPushService.Default,
       WebPushServiceLive,
       TokenBucketRateLimiter.Default,
+      GetConnInfo.Default,
       IssueTurnCredentialsUseCase.Default,
       JwtServicesLive,
       AuthService.Default,

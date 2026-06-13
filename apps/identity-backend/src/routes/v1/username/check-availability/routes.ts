@@ -2,8 +2,8 @@ import type { IndividualityUsernameService } from '#root/features/individuality/
 import { createOpenAPIHono, ProblemDetailWithErrorsZod, problemResponse } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
 import { BaseUsername } from '#root/schema/username.js'
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
 import { createRoute, z } from '@hono/zod-openapi'
+import { bridgeSpanContext } from '@identity-backend/observability'
 import {
   Array,
   Cause,

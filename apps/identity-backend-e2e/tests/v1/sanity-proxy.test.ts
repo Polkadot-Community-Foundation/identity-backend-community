@@ -1,4 +1,4 @@
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { hc } from 'hono/client'
 import type { App } from 'identity-backend-container/v1'
 import { Binary } from 'polkadot-api'
@@ -71,9 +71,7 @@ type UsernameData = {
           header: {},
           json: formatParams(params),
         })
-        checkResponse(registrationResponse, 202)
-
-        const registrationData = await registrationResponse.json()
+        const registrationData = await (await checkResponseWithBody(registrationResponse, 202)).json()
         const fullUsername = registrationData.username
 
         expect(registrationData).toMatchObject({

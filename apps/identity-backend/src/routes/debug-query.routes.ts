@@ -1,4 +1,4 @@
-import { DEBUG_SQL_ENABLED, SWAGGER_PASSWORD, SWAGGER_USERNAME } from '#root/config.js'
+import { DEBUG_PASSWORD, DEBUG_SQL_ENABLED, DEBUG_USERNAME } from '#root/config.js'
 import { DB } from '#root/db/drizzle.js'
 import { effectValidator } from '#root/lib/effect-validator.js'
 import { sql } from 'drizzle-orm'
@@ -27,7 +27,7 @@ export const makeDebugQueryRoute = Effect.gen(function*() {
 
   const db = yield* DB
   const config = yield* DebugQueryConfig
-  const [username, password] = yield* Config.all([SWAGGER_USERNAME, SWAGGER_PASSWORD])
+  const [username, password] = yield* Config.all([DEBUG_USERNAME, DEBUG_PASSWORD])
 
   const windowMs = Duration.toMillis(config.rateLimitWindow)
   const timeoutSeconds = Duration.toSeconds(config.statementTimeout)

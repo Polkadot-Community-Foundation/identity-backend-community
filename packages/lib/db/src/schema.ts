@@ -72,6 +72,12 @@ export const individualityUsernames = polkadotAppSchema.table(
 
 export type IndividualityUsername = typeof individualityUsernames.$inferSelect
 
+/**
+ * @deprecated Challenge issuance is now stateless (HMAC token, no DB row). This
+ * table is no longer read or written, but is retained so the stateless rollout
+ * can be rolled back without data loss. Drop it in a follow-up once stateless
+ * issuance is proven in production.
+ */
 export const challenges = polkadotAppSchema.table(
   'challenges',
   {
@@ -351,6 +357,16 @@ export const lifetimePoudVouchers = polkadotAppSchema.table(
 )
 
 export type LifetimePoudVoucher = typeof lifetimePoudVouchers.$inferSelect
+
+export const voucherSecrets = polkadotAppSchema.table(
+  'voucher_secrets',
+  {
+    secretHash: text('secret_hash').primaryKey(),
+    redeemedAt: timestamp('redeemed_at', { withTimezone: true }),
+  },
+)
+
+export type VoucherSecret = typeof voucherSecrets.$inferSelect
 
 export const leaderElection = polkadotAppSchema.table(
   'leader_election',

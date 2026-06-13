@@ -65,7 +65,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search usernames with prefix 'alice' ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'alice' } }))
 
           // --- @assert: Response contains 3 usernames with null cursor ---
           checkResponse(res, 200)
@@ -99,7 +99,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search usernames with prefix 'alice' ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'alice' } }))
 
           // --- @assert: Response contains non-empty username strings ---
           checkResponse(res, 200)
@@ -128,7 +128,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search with mixed case prefix 'userTEST' ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'userTEST' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'userTEST' } }))
 
           // --- @assert: Case-insensitive matching returns results ---
           checkResponse(res, 200)
@@ -154,7 +154,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search for ordertest ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'ordertest' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'ordertest' } }))
 
           // --- @assert: Results ordered numerically (1, 2, 10) not lexicographically (1, 10, 2) ---
           checkResponse(res, 200)
@@ -194,7 +194,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: prefix without dot includes both lite and full ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'alice' } }))
 
           // --- @assert: both representations appear in results ---
           checkResponse(res, 200)
@@ -237,7 +237,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: trailing dot restricts to lite usernames ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice.' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'alice.' } }))
 
           // --- @assert: only lite forms returned, full excluded ---
           checkResponse(res, 200)
@@ -282,7 +282,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: digits-qualified prefix matches lite rows starting with 'alice.10' ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice.10' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'alice.10' } }))
 
           // --- @assert: only the matching lite row is returned ---
           checkResponse(res, 200)
@@ -314,7 +314,9 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search with limit=2 to trigger pagination ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice', limit: 2 } }))
+          const res = yield* Effect.promise(() =>
+            client.search.$get({ header: {}, query: { prefix: 'alice', limit: 2 } })
+          )
 
           // --- @assert: Returns exactly 2 results with non-null cursor ---
           checkResponse(res, 200)
@@ -344,12 +346,17 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Fetch first page, then second page using cursor ---
-          const res1 = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'david', limit: 10 } }))
+          const res1 = yield* Effect.promise(() =>
+            client.search.$get({ header: {}, query: { prefix: 'david', limit: 10 } })
+          )
           checkResponse(res1, 200)
           const body1 = yield* Effect.promise(() => res1.json())
 
           const res2 = yield* Effect.promise(() =>
-            client.search.$get({ query: { prefix: 'david', limit: 10, cursor: body1.nextCursor ?? undefined } })
+            client.search.$get({
+              header: {},
+              query: { prefix: 'david', limit: 10, cursor: body1.nextCursor ?? undefined },
+            })
           )
           checkResponse(res2, 200)
           const body2 = yield* Effect.promise(() => res2.json())
@@ -382,17 +389,18 @@ describe('UsernameSearch', () => {
 
           // --- @act: Paginate through all pages until cursor is null ---
           const allUsernames = yield* collectAllPages((cursor) =>
-            Effect.promise(() => client.search.$get({ query: { prefix: 'david', limit: 10, cursor } })).pipe(
-              Effect.filterOrDie(
-                (res): res is Extract<typeof res, { status: 200 }> => res.status === 200,
-                () => new Error('Expected 200 response'),
-              ),
-              Effect.flatMap((res) => Effect.promise(() => res.json())),
-              Effect.map((body) => ({
-                items: body.usernames.map((u: { username: string }) => u.username),
-                nextCursor: body.nextCursor,
-              })),
-            )
+            Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'david', limit: 10, cursor } }))
+              .pipe(
+                Effect.filterOrDie(
+                  (res): res is Extract<typeof res, { status: 200 }> => res.status === 200,
+                  () => new Error('Expected 200 response'),
+                ),
+                Effect.flatMap((res) => Effect.promise(() => res.json())),
+                Effect.map((body) => ({
+                  items: body.usernames.map((u: { username: string }) => u.username),
+                  nextCursor: body.nextCursor,
+                })),
+              )
           )
 
           // --- @assert: All 15 records collected with no duplicates ---
@@ -408,7 +416,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search for non-existent prefix ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'nonexistent' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'nonexistent' } }))
 
           // --- @assert: Returns empty array with null cursor ---
           checkResponse(res, 200)
@@ -436,7 +444,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search without specifying limit ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'defaultlimit' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'defaultlimit' } }))
 
           // --- @assert: Returns default limit of 100 results ---
           checkResponse(res, 200)
@@ -458,7 +466,9 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search with excessive limit of 2000 ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'limituser', limit: 2000 } }))
+          const res = yield* Effect.promise(() =>
+            client.search.$get({ header: {}, query: { prefix: 'limituser', limit: 2000 } })
+          )
 
           // --- @assert: Results capped at maximum 1000 ---
           checkResponse(res, 200)
@@ -476,7 +486,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           const res = yield* Effect.promise(() =>
-            client.search.$get({ query: { prefix: 'alice', cursor: 'invalid-cursor' } })
+            client.search.$get({ header: {}, query: { prefix: 'alice', cursor: 'invalid-cursor' } })
           )
 
           expect(res.status, 'invalid cursor should be rejected').toBe(400)
@@ -488,7 +498,9 @@ describe('UsernameSearch', () => {
 
           const client = yield* makeClient
 
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'invalid@chars!' } }))
+          const res = yield* Effect.promise(() =>
+            client.search.$get({ header: {}, query: { prefix: 'invalid@chars!' } })
+          )
 
           expect(res.status).toBe(400)
           expect(res.headers.get('content-type')).toBe('application/problem+json')
@@ -500,7 +512,7 @@ describe('UsernameSearch', () => {
 
           const client = yield* makeClient
 
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice.1a' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'alice.1a' } }))
 
           expect(res.status, 'prefix with non-digits after dot is rejected').toBe(400)
         }))
@@ -511,7 +523,7 @@ describe('UsernameSearch', () => {
 
           const client = yield* makeClient
 
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice..10' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'alice..10' } }))
 
           expect(res.status, 'prefix with multiple dots is rejected').toBe(400)
         }))
@@ -533,7 +545,7 @@ describe('UsernameSearch', () => {
 
           // --- @act: Search with includeOnchainData=true ---
           const res = yield* Effect.promise(() =>
-            client.search.$get({ query: { prefix: 'alice', includeOnchainData: 'true' } })
+            client.search.$get({ header: {}, query: { prefix: 'alice', includeOnchainData: 'true' } })
           )
 
           // --- @assert: Response includes onchain data ---
@@ -562,7 +574,7 @@ describe('UsernameSearch', () => {
           const client = yield* makeClient
 
           // --- @act: Search without includeOnchainData flag ---
-          const res = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'alice' } }))
+          const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'alice' } }))
 
           // --- @assert: Response excludes onchain data ---
           checkResponse(res, 200)

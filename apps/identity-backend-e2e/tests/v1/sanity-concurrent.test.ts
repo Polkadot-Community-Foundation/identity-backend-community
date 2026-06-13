@@ -11,6 +11,7 @@ import {
   transferFundsBatch,
 } from '../helpers.ts'
 
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { setupTestEnvironment, teardownTestEnvironment } from '../setup.ts'
 
 const ALICE_MNEMONIC = 'bottom drive obey lake curtain smoke basket hold race lonely fit walk'
@@ -64,8 +65,10 @@ const WAIT_CONFIG = {
 
       const fullUsernames: string[] = []
       for (const response of responses) {
-        expect(response.status, 'Concurrent registration should be accepted').toBe(202)
-        const data = (await response.json()) as { username: string }
+        const data =
+          (await (await checkResponseWithBody(response, 202, 'Concurrent registration should be accepted')).json()) as {
+            username: string
+          }
         fullUsernames.push(data.username)
       }
 

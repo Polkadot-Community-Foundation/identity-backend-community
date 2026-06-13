@@ -5,13 +5,17 @@ import type { IndividualityUsernameService } from '#root/features/individuality/
 import * as DigitSelection from '#root/features/username-registration/digit-selection.js'
 import { createOpenAPIHono, ProblemDetailWithErrorsZod, problemResponse } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
+import {
+  peopleUsernameIntakeDurationHistogram,
+  peopleUsernameRegistrationsIntakeCounter,
+} from '#root/metrics/people.js'
 import { makeDeviceCheckIOSMiddleware } from '#root/middleware/auth/device-check.js'
 import { BaseUsername, UsernameDigits } from '#root/schema/username.js'
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
 import type { HttpBindings } from '@hono/node-server'
 import { createRoute, z } from '@hono/zod-openapi'
 import type { DeviceCheckService } from '@identity-backend/auth/services'
-import { type DeviceCheckVariables, IOS_DEVICE_TOKEN_VAR } from '@identity-backend/hono-auth/device-check'
+import { DEVICE_CHECK_DECISION_VAR, type DeviceCheckVariables } from '@identity-backend/hono-auth/device-check'
+import { bridgeSpanContext } from '@identity-backend/observability'
 import type { Ss58String } from '@identity-backend/substrate-schema'
 import type { SpanContext } from '@opentelemetry/api'
 import { encodeHex } from '@std/encoding'
@@ -25,6 +29,7 @@ import {
   HashSet,
   Layer,
   Match,
+  Metric,
   Option,
   Random,
   Runtime,
@@ -80,6 +85,14 @@ export class IOSDeviceRegistrationFailedError
   extends S.TaggedError<IOSDeviceRegistrationFailedError>()('IOSDeviceRegistrationFailedError', {
     cause: S.optionalWith(S.Unknown, { nullable: true }),
   })
+{}
+
+export class DeviceCheckPaymentRequiredError
+  extends S.TaggedError<DeviceCheckPaymentRequiredError>()('DeviceCheckPaymentRequiredError', {})
+{}
+
+export class DeviceCheckTokenRequiredError
+  extends S.TaggedError<DeviceCheckTokenRequiredError>()('DeviceCheckTokenRequiredError', {})
 {}
 
 type RegistrationTxError =
@@ -275,7 +288,8 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
                 }),
               },
             },
-            description: 'Unauthorized — invalid or missing JWT',
+            description:
+              'Unauthorized — invalid or missing JWT, or a required Device-Token-iOS header was missing or could not be decoded',
           },
           409: {
             content: {
@@ -304,6 +318,16 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
               },
             },
             description: 'Internal Server Error',
+          },
+          502: {
+            content: {
+              'application/json': {
+                schema: z.object({
+                  error: z.string(),
+                }),
+              },
+            },
+            description: 'Bad Gateway — device verification could not be completed upstream',
           },
         },
       }),
@@ -346,12 +370,14 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
               : { availableDigits, baseUsername },
           )
 
-          const deviceState = c.get(IOS_DEVICE_TOKEN_VAR)
+          const deviceCheckDecision = c.get(DEVICE_CHECK_DECISION_VAR)
 
-          yield* Match.value(deviceState).pipe(
-            Match.tag('DeviceCheckAlreadyUsed', (err) => Effect.fail(err)),
-            Match.tag('DeviceCheckFailed', (err) => Effect.fail(err)),
-            Match.orElse(() => Effect.void),
+          yield* Match.value(deviceCheckDecision).pipe(
+            Match.tag('DeviceCheckBlocked', () => Effect.fail(new DeviceCheckPaymentRequiredError({}))),
+            Match.tag('DeviceCheckTokenRequired', () => Effect.fail(new DeviceCheckTokenRequiredError({}))),
+            Match.tag('DeviceCheckRegister', () => Effect.void),
+            Match.tag('DeviceCheckProceed', () => Effect.void),
+            Match.exhaustive,
           )
 
           const trace = yield* Effect.currentSpan.pipe(Effect.orElse(() => Effect.succeed(null)))
@@ -391,20 +417,41 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
                         .returning()
                     ).pipe(
                       Effect.mapError((cause) => new UsernameRegistrationPersistenceError({ cause })),
+                      Effect.tapError(() =>
+                        Metric.increment(
+                          Metric.tagged(peopleUsernameRegistrationsIntakeCounter, 'disposition', 'persistence_error'),
+                        )
+                      ),
                     )
 
                     if (inserted.length === 0) {
+                      yield* Metric.increment(
+                        Metric.tagged(peopleUsernameRegistrationsIntakeCounter, 'disposition', 'already_taken'),
+                      )
                       return yield* Effect.fail(
                         new UsernameAlreadyTakenError({ username: baseUsername, digits: selectedDigits }),
                       )
                     }
 
-                    yield* Match.value(deviceState).pipe(
-                      Match.tag('DeviceCheckAvailable', (state) =>
-                        registerIOSDevice(state.deviceToken).pipe(
+                    yield* Metric.increment(
+                      Metric.tagged(peopleUsernameRegistrationsIntakeCounter, 'disposition', 'inserted'),
+                    )
+                    yield* dotns !== undefined
+                      ? Metric.update(
+                        peopleUsernameIntakeDurationHistogram,
+                        Math.max(0, inserted[0]!.createdAt.getTime() / 1000 - dotns.signedAt),
+                      )
+                      : Effect.void
+
+                    yield* Match.value(deviceCheckDecision).pipe(
+                      Match.tag('DeviceCheckRegister', (decision) =>
+                        registerIOSDevice(decision.deviceToken).pipe(
                           Effect.mapError((cause) => new IOSDeviceRegistrationFailedError({ cause })),
                         )),
-                      Match.orElse(() => Effect.void),
+                      Match.tag('DeviceCheckBlocked', () => Effect.void),
+                      Match.tag('DeviceCheckTokenRequired', () => Effect.void),
+                      Match.tag('DeviceCheckProceed', () => Effect.void),
+                      Match.exhaustive,
                     )
                   }).pipe(
                     Effect.either,
@@ -429,10 +476,19 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
             },
           )
 
+          const deviceCheckAvailable = Match.value(deviceCheckDecision).pipe(
+            Match.tag('DeviceCheckRegister', () => Option.some(true)),
+            Match.tag('DeviceCheckProceed', (decision) => decision.available),
+            Match.tag('DeviceCheckBlocked', () => Option.none<boolean>()),
+            Match.tag('DeviceCheckTokenRequired', () => Option.none<boolean>()),
+            Match.exhaustive,
+          )
+
           return {
             base_username: baseUsername,
             digits: selectedDigits,
             username: `${baseUsername}.${selectedDigits}`,
+            ...(Option.isSome(deviceCheckAvailable) ? { device_check_available: deviceCheckAvailable.value } : {}),
           }
         }).pipe(
           Effect.withSpan('v1.register_username'),
@@ -476,7 +532,7 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
               )),
           ),
           Effect.catchTag(
-            'DeviceCheckAlreadyUsed',
+            'DeviceCheckPaymentRequiredError',
             () =>
               Effect.succeed(c.json(
                 { registrationOutcome: 'PAYMENT_REQUIRED' as const },
@@ -484,18 +540,18 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
               )),
           ),
           Effect.catchTag(
+            'DeviceCheckTokenRequiredError',
+            () =>
+              Effect.succeed(c.json(
+                { error: 'A valid Device-Token-iOS header is required.' },
+                401,
+              )),
+          ),
+          Effect.catchTag(
             'UsernameRegistrationPersistenceError',
             () =>
               Effect.succeed(c.json(
                 { error: 'Failed to persist username registration' },
-                500,
-              )),
-          ),
-          Effect.catchTag(
-            'DeviceCheckFailed',
-            () =>
-              Effect.succeed(c.json(
-                { error: 'Device check failed' },
                 500,
               )),
           ),

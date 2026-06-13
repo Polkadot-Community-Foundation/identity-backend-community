@@ -1,0 +1,54 @@
+{
+  "name": "@identity-backend/tx-events",
+  "version": "0.0.1",
+  "private": true,
+  "license": "MIT",
+  "sideEffects": false,
+  "type": "module",
+  "exports": {
+    ".": {
+      "@identity-backend/source": "./src/mod.ts",
+      "default": "./dist/index.mjs"
+    },
+    "./package.json": "./package.json"
+  },
+  "files": [
+    "dist"
+  ],
+  "scripts": {
+    "clean": "rimraf dist",
+    "build": "tsdown",
+    "typecheck": "tsgo --noEmit --incremental",
+    "test": "vitest run",
+    "test:run": "vitest run",
+    "test:types": "tstyche",
+    "lint": "oxlint . ${AGENT:+--format=unix --quiet}"
+  },
+  "dependencies": {
+    "@identity-backend/observability": "workspace:^",
+    "effect": "catalog:"
+  },
+  "devDependencies": {
+    "@effect/vitest": "catalog:",
+    "@identity-backend/oxlint-config": "workspace:^",
+    "@identity-backend/rx-effect": "workspace:^",
+    "@identity-backend/vitest-config": "workspace:^",
+    "@vitest/coverage-v8": "catalog:",
+    "fast-check": "catalog:",
+    "polkadot-api": "catalog:",
+    "rxjs": "catalog:",
+    "tsdown": "catalog:",
+    "tstyche": "^7.1.0",
+    "vitest": "catalog:"
+  },
+  "peerDependencies": {
+    "effect": "catalog:",
+    "polkadot-api": "catalog:"
+  },
+  "publishConfig": {
+    "exports": {
+      ".": "./dist/index.mjs",
+      "./package.json": "./package.json"
+    }
+  }
+}

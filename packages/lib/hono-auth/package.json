@@ -48,6 +48,7 @@
   "devDependencies": {
     "@effect/platform": "catalog:",
     "@effect/vitest": "catalog:",
+    "@identity-backend/android-attest": "workspace:^",
     "@identity-backend/auth": "workspace:^",
     "@identity-backend/oxlint-config": "workspace:^",
     "@identity-backend/stryker-plugins": "workspace:^",
@@ -59,17 +60,18 @@
     "@stryker-mutator/vitest-runner": "^9.6.1",
     "@vitest/coverage-v8": "catalog:",
     "effect": "catalog:",
-    "hono": "^4.12.18",
+    "hono": "^4.12.22",
     "tsdown": "catalog:",
     "vite-tsconfig-paths": "^6.1.1",
     "vitest": "catalog:"
   },
   "peerDependencies": {
     "@effect/platform": "catalog:",
+    "@identity-backend/android-attest": "workspace:^",
     "@identity-backend/auth": "workspace:^",
     "@identity-backend/play-integrity": "workspace:^",
     "effect": "catalog:",
-    "hono": "^4.12.18"
+    "hono": "^4.12.22"
   },
   "publishConfig": {
     "exports": {

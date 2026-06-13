@@ -90,7 +90,7 @@
  */
 
 import { previewnet_asset_hub } from '@identity-backend/descriptors'
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { Bytes, Option, Tuple } from '@polkadot-api/substrate-bindings'
 import { sr25519CreateDerive } from '@polkadot-labs/hdkd'
 import { mnemonicToMiniSecret, ss58Decode } from '@polkadot-labs/hdkd-helpers'
@@ -219,8 +219,7 @@ describe('E2E: DotNS reservation daemon on chopsticks Asset Hub', () => {
         header: {},
         json: { ...formatParams(params), preferredDigits, dotns: { signature: dotnsSignature, signedAt } },
       })
-      checkResponse(response, 202)
-      const registrationData = await response.json()
+      const registrationData = await (await checkResponseWithBody(response, 202)).json()
       expect(registrationData).toMatchObject({
         base_username: baseUsername,
         digits: preferredDigits,
@@ -296,7 +295,7 @@ describe('E2E: DotNS reservation daemon on chopsticks Asset Hub', () => {
           dotns: { signature: tamperedDotnsSignature, signedAt },
         },
       })
-      checkResponse(response, 202)
+      await checkResponseWithBody(response, 202)
 
       // The pallet's signature verification in `construct_reservation_message`
       // must reject this. The proof is the absence of any on-chain

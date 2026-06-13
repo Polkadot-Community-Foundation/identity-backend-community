@@ -6,7 +6,7 @@ import { testClient } from 'hono/testing'
 import * as crypto from 'node:crypto'
 import { afterEach, describe, expect, vi } from 'vitest'
 import { makePlayIntegrityMiddleware, PlayIntegrityMiddlewareConfig } from '../middleware.js'
-import { ConsumeChallengeError } from '../types.js'
+import { ChallengeRejectedError } from '../types.js'
 
 describe('PlayIntegrityMiddleware', () => {
   const buildClientDataHash = vi.fn<PlayIntegrityMiddlewareConfig['Type']['buildClientDataHash']>()
@@ -232,7 +232,7 @@ describe('PlayIntegrityMiddleware', () => {
 
           yield* mockAllSuccess
           yield* Effect.sync(() =>
-            consumeChallenge.mockImplementation(() => Effect.fail(ConsumeChallengeError.make({})))
+            consumeChallenge.mockImplementation(() => Effect.fail(ChallengeRejectedError.make({ reason: 'expired' })))
           )
 
           const res = yield* Effect.tryPromise(() =>
