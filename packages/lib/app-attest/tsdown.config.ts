@@ -7,6 +7,7 @@ export default defineConfig({
     Certificates: './src/certificates.ts',
     Attestation: './src/attestation.ts',
     Assertion: './src/assertion.ts',
+    testing: './src/testing/mod.ts',
   },
   exports: {
     devExports: '@identity-backend/source',

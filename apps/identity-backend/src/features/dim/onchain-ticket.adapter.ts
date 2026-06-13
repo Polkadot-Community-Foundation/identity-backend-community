@@ -1,9 +1,8 @@
+import { ChainId, ChainSubmitter } from '#root/infrastructure/adapters/blockchain/chain-submitter.adapter.js'
 import { PeopleTypedAPI } from '#root/infrastructure/adapters/blockchain/people-typed-api.service.js'
-import { logTxEvent, watchThroughReorgs } from '#root/infrastructure/tx-event.io.js'
 import { BatchRegistrationResult } from '@identity-backend/dim-ticket'
-import { fromObservable } from '@identity-backend/rx-effect'
-import { Array, Context, Duration, Effect, flow, Layer, Match, Option, pipe, Schema as S, Sink, Stream } from 'effect'
-import { Enum, type PolkadotSigner, type TxFinalized } from 'polkadot-api'
+import { Array, Context, Duration, Effect, flow, Layer, Match, Schema as S } from 'effect'
+import { Enum, type PolkadotSigner } from 'polkadot-api'
 import { TicketAddress } from './invitation-ticket.schema.js'
 import { parseForceBatchResults } from './onchain-ticket-events.js'
 
@@ -40,6 +39,7 @@ export namespace OnChainTicketAPI {
 
 const make = Effect.gen(function*() {
   const nextAPI = yield* PeopleTypedAPI
+  const chainSubmitter = yield* ChainSubmitter
 
   const setTickets = (Effect.fn('blockchain.set_invite_ticket')(
     function*(tickets, signer, options) {
@@ -66,63 +66,38 @@ const make = Effect.gen(function*() {
         })
         : baseTx
 
-      const [_extrinsicDuration, txEvents] = yield* Effect.sync(() => tx.signSubmitAndWatch(signer)).pipe(
-        Effect.map(fromObservable((cause) => new OnChainTicketAPIError({ cause }))),
-        Effect.timed,
+      const finalized = yield* chainSubmitter.submit(signer, tx, {
+        chain: ChainId.make('people'),
+        timeout: Duration.seconds(120),
+        finalizationTimeout: Duration.seconds(70),
+      }).pipe(
+        Effect.mapError((cause) => new OnChainTicketAPIError({ cause })),
       )
 
-      const [_finalizationDuration, result] = yield* pipe(
-        txEvents,
-        Stream.tap(logTxEvent),
-        watchThroughReorgs,
-        Stream.filter((e): e is TxFinalized => e.type === 'finalized'),
-        Stream.tap((finalized) => Effect.annotateCurrentSpan('blockchain.tx.hash', finalized.txHash)),
-        Stream.run(Sink.head()),
-        Effect.flatMap((option) =>
-          Option.match(option, {
-            onNone: () =>
-              Effect.fail(
-                new OnChainTicketAPIError({
-                  cause: new Error('No finalized event received'),
-                }),
-              ),
-            onSome: (finalized) =>
-              finalized.ok
-                ? Effect.gen(function*() {
-                  const { completedIndices, failedIndices } = parseForceBatchResults(
-                    finalized.events,
-                    tickets.length,
-                  )
-                  const blockHash = finalized.block.hash
-                  const blockNumber = finalized.block.number
-                  yield* Effect.annotateCurrentSpan({
-                    'dim.ticket.completed': completedIndices.length,
-                    'dim.ticket.failed': failedIndices.length,
-                    'blockchain.tx.block_hash': blockHash,
-                    'blockchain.tx.block_number': blockNumber,
-                  })
-                  return new BatchRegistrationResult({ completedIndices, failedIndices, blockHash, blockNumber })
-                })
-                : Effect.fail(
-                  new OnChainTicketAPIError({
-                    cause: finalized.dispatchError,
-                  }),
-                ),
-          })
+      return yield* Match.value(finalized).pipe(
+        Match.tag(
+          'TransactionReverted',
+          (reverted) => Effect.fail(new OnChainTicketAPIError({ cause: reverted.dispatchError })),
         ),
-        Effect.timeout(Duration.seconds(120)),
-        Effect.catchAll((cause) =>
-          Effect.fail(
-            new OnChainTicketAPIError({
-              cause: cause instanceof Error ? cause : new Error('Transaction finalization failed', { cause }),
-            }),
-          )
-        ),
-        Effect.withSpan('blockchain.wait_finalization'),
-        Effect.timed,
+        Match.tag('TransactionIncluded', (included) =>
+          Effect.gen(function*() {
+            const { completedIndices, failedIndices } = parseForceBatchResults(included.events, tickets.length)
+            yield* Effect.annotateCurrentSpan({
+              'dim.ticket.completed': completedIndices.length,
+              'dim.ticket.failed': failedIndices.length,
+              'blockchain.tx.hash': included.txHash,
+              'blockchain.tx.block_hash': included.block.hash,
+              'blockchain.tx.block_number': included.block.number,
+            })
+            return new BatchRegistrationResult({
+              completedIndices,
+              failedIndices,
+              blockHash: included.block.hash,
+              blockNumber: included.block.number,
+            })
+          })),
+        Match.exhaustive,
       )
-
-      return result
     },
   )) satisfies OnChainTicketAPI.Service['setTickets']
 

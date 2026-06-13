@@ -1,5 +1,5 @@
 import { pop_testnet } from '@identity-backend/descriptors'
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { hc } from 'hono/client'
 import type { App } from 'identity-backend-container/v1'
 import { Binary, createClient } from 'polkadot-api'
@@ -79,9 +79,7 @@ const WAIT_CONFIG = {
         query: {},
         json: { usernames: [username] },
       })
-      checkResponse(availabilityResponse, 200)
-
-      const availabilityData = await availabilityResponse.json()
+      const availabilityData = await (await checkResponseWithBody(availabilityResponse, 200)).json()
       expect(
         getStatusFromResponse(availabilityData, username),
         'Pre-condition: Username should be available before registration',
@@ -95,9 +93,7 @@ const WAIT_CONFIG = {
           preferredDigits: '42',
         },
       })
-      checkResponse(registrationResponse, 202) // 202 Accepted - async processing
-
-      const registrationData = await registrationResponse.json()
+      const registrationData = await (await checkResponseWithBody(registrationResponse, 202)).json()
       const fullUsername = registrationData.username
 
       expect(registrationData).toMatchObject({
@@ -115,8 +111,7 @@ const WAIT_CONFIG = {
             const response = await app.api.v1.usernames[':username'].$get({
               param: { username: fullUsername },
             })
-            checkResponse(response, 200)
-            return await response.json()
+            return await (await checkResponseWithBody(response, 200)).json()
           }
           return null
         },
@@ -180,11 +175,10 @@ const WAIT_CONFIG = {
       ])
 
       // ASSERT: Both registrations should be accepted with correct digits
-      checkResponse(reg1Response, 202, 'User1 registration should be accepted')
-      checkResponse(reg2Response, 202, 'User2 registration should be accepted')
-
-      const reg1Data = await reg1Response.json()
-      const reg2Data = await reg2Response.json()
+      const reg1Data = await (await checkResponseWithBody(reg1Response, 202, 'User1 registration should be accepted'))
+        .json()
+      const reg2Data = await (await checkResponseWithBody(reg2Response, 202, 'User2 registration should be accepted'))
+        .json()
 
       expect(reg1Data).toMatchObject({
         base_username: baseUsername,

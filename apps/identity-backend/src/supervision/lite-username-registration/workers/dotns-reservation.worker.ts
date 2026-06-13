@@ -1,22 +1,22 @@
 import { outcomeFromTxResult } from '#root/batch-backoff/batch-backoff.acl.js'
 import { recordBatchOutcome, RecordBatchOutcomeDeps } from '#root/batch-backoff/batch-backoff.executor.js'
 import { type BatchSize, BatchSizePolicy } from '#root/batch-backoff/batch-backoff.schema.js'
-import { TransactionSubmitError } from '#root/data/mod.js'
 import { schema } from '#root/db/mod.js'
 import type { IndividualityUsername } from '#root/db/schema.js'
+import { ChainId, ChainSubmitter } from '#root/infrastructure/adapters/blockchain/chain-submitter.adapter.js'
 import {
   type AhItemFailedEvFilter,
   DotnsGatewayAPI,
 } from '#root/infrastructure/adapters/blockchain/dotns-gateway.adapter.js'
+import type { TransactionIncluded } from '#root/infrastructure/adapters/blockchain/finalized-transaction.schema.js'
 import { UtilityAPI } from '#root/infrastructure/adapters/blockchain/utility-chain.adapter.js'
-import { logTxEvent, runTxFinalized, watchThroughReorgs } from '#root/infrastructure/tx-event.io.js'
 import { dotnsGatewayReserveLatencyHistogram } from '#root/metrics/dotns-gateway.js'
 import { sr25519 } from '@identity-backend/crypto'
 import { DB } from '@identity-backend/db'
 import { Daemon } from '@identity-backend/effect-daemon-spec'
-import { fromObservable } from '@identity-backend/rx-effect'
+
 import { and, eq } from 'drizzle-orm'
-import { Array, Context, Duration, Effect, Either, Metric, Option, pipe, Ref, Schedule, Stream } from 'effect'
+import { Array, Context, Duration, Effect, Either, Match, Metric, Option, pipe, Ref, Schedule } from 'effect'
 import { Binary, type PolkadotSigner, type TxFinalized } from 'polkadot-api'
 
 type AhUtilityItemFailed = ReturnType<AhItemFailedEvFilter>[number]
@@ -219,7 +219,8 @@ const markStaleRowsFailed = (rows: readonly IndividualityUsername[]) =>
     )
   })
 
-type ProcessedResult = TxFinalized & {
+type ProcessedResult = {
+  readonly block: TransactionIncluded['block']
   readonly candidateRows: readonly IndividualityUsername[]
   readonly processedEvents: ProcessedEvents
   readonly now: Date
@@ -356,7 +357,8 @@ export class DotnsReservationWorkerConfig extends Context.Tag(
   DotnsReservationWorkerConfig,
   {
     readonly dotnsGatewayEnabled: boolean
-    readonly submitTimeout: Duration.Duration
+    readonly inclusionTimeout: Duration.Duration
+    readonly finalizationTimeout: Duration.Duration
     readonly batchSize: BatchSize
     readonly pollInterval: Duration.Duration
     readonly tickTimeout: Duration.Duration
@@ -374,6 +376,7 @@ export const make = Effect.gen(function*() {
   const db = yield* DB
   const dotnsGateway = yield* DotnsGatewayAPI
   const utilityAPI = yield* UtilityAPI
+  const chainSubmitter = yield* ChainSubmitter
   const { operationsTotalCounter, operationsFailuresCounter } = config
   const batchSizePolicy = BatchSizePolicy.Default(config.batchSize)
   const batchSizeRef = yield* Ref.make(batchSizePolicy.max)
@@ -551,18 +554,13 @@ export const make = Effect.gen(function*() {
 
       yield* Effect.logDebug('Reserve dotNS names extrinsic started')
 
-      const submission = yield* Effect.either(pipe(
-        Effect.sync(() => tx.signSubmitAndWatch(attesterAhSigner)),
-        Effect.map(fromObservable((err) => new TransactionSubmitError({ cause: err }))),
-        Effect.andThen((stream) =>
-          pipe(
-            stream,
-            Stream.tap(logTxEvent),
-            watchThroughReorgs,
-            runTxFinalized({ timeout: config.submitTimeout }),
-          )
-        ),
-      ))
+      const submission = yield* Effect.either(
+        chainSubmitter.submit(attesterAhSigner, tx, {
+          chain: ChainId.make('asset-hub'),
+          timeout: config.inclusionTimeout,
+          finalizationTimeout: config.finalizationTimeout,
+        }),
+      )
       yield* recordBatchOutcome(outcomeFromTxResult(submission)).pipe(
         Effect.provideService(RecordBatchOutcomeDeps, batchBackoff),
       )
@@ -571,11 +569,16 @@ export const make = Effect.gen(function*() {
         yield* Effect.logWarning('Reserve dotNS names extrinsic failed', { 'error.type': submission.left._tag })
         return
       }
-      if (!submission.right.ok) {
+      const included = Match.value(submission.right).pipe(
+        Match.tag('TransactionIncluded', (transaction) => Option.some(transaction)),
+        Match.tag('TransactionReverted', () => Option.none<TransactionIncluded>()),
+        Match.exhaustive,
+      )
+      if (Option.isNone(included)) {
         return
       }
 
-      const txResult = submission.right
+      const txResult = included.value
       yield* Effect.annotateLogsScoped({
         blockHash: txResult.block.hash,
         blockNumber: txResult.block.number,
@@ -629,7 +632,7 @@ export const make = Effect.gen(function*() {
       }
 
       yield* updateDB({
-        ...txResult,
+        block: txResult.block,
         candidateRows: freshRows,
         processedEvents,
         now: new Date(),

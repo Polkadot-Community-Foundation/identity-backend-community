@@ -1,4 +1,4 @@
-import { ChallengeNotFoundError, ConsumeChallengeError } from '@identity-backend/auth/types'
+import { ChallengeRejectedError } from '@identity-backend/auth/types'
 import type { playintegrity_v1 } from '@identity-backend/play-integrity'
 import { equals as bytesEquals } from '@std/bytes/equals'
 import { toArrayBuffer } from '@std/streams/to-array-buffer'
@@ -30,7 +30,7 @@ export class PlayIntegrityMiddlewareConfig
     readonly buildClientDataHash: (_: BuildClientDataHashParams) => Effect.Effect<Uint8Array>
     readonly isTokenValid: (_: playintegrity_v1.Schema$TokenPayloadExternal) => Effect.Effect<void, InvalidTokenError>
     readonly isPackageNameValid: (_: string) => Effect.Effect<boolean, never, never>
-    readonly consumeChallenge: (_: Uint8Array) => Effect.Effect<void, ChallengeNotFoundError | ConsumeChallengeError>
+    readonly consumeChallenge: (_: Uint8Array) => Effect.Effect<void, ChallengeRejectedError>
     readonly decodeIntegrityToken: (_: DecodeIntegrityTokenParams) => Effect.Effect<DecodeIntegrityTokenResult>
   }>()
 {}

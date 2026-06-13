@@ -3,4 +3,5 @@ import { defineConfig } from 'oxlint'
 
 export default defineConfig({
   extends: [base],
+  ignorePatterns: ['infra/**', 'sst.config.ts'],
 })

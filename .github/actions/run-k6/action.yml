@@ -38,6 +38,13 @@ inputs:
       accepts (e.g. "10m", "300s").
     required: false
     default: "10m"
+  extra-env:
+    description: |
+      Newline-separated KEY=VALUE pairs passed to k6 as additional `--env`
+      flags (e.g. PREFIX_MANIFEST, POC). Lets a caller point the script at a
+      seeded fixture manifest without changing the action's fixed flags.
+    required: false
+    default: ""
 
 runs:
   using: composite
@@ -78,10 +85,19 @@ runs:
       env:
         JWT_SECRET: ${{ inputs.jwt-secret }}
         MAX_DURATION: ${{ inputs.max-duration }}
+        LOADTEST_RUN_ID: ${{ github.run_id }}-${{ github.run_attempt }}
+        EXTRA_ENV: ${{ inputs.extra-env }}
       run: |
         set -euo pipefail
 
+        echo "load-test run id: ${LOADTEST_RUN_ID} — trace filter: http.user_agent starts with k6-loadtest/${LOADTEST_RUN_ID}"
         mkdir -p /tmp/k6-results
+
+        declare -a EXTRA_FLAGS=()
+        while IFS= read -r kv; do
+          [ -z "$kv" ] && continue
+          EXTRA_FLAGS+=(--env "$kv")
+        done <<< "${EXTRA_ENV}"
 
         # `timeout --preserve-status` returns k6's own exit code on normal
         # exit and exit 124 on the wall-clock cap. Either way we keep going
@@ -91,6 +107,7 @@ runs:
           k6 run "${{ inputs.script }}" \
             --env BASE_URL="${{ inputs.base-url }}" \
             ${JWT_SECRET:+--env JWT_SECRET="$JWT_SECRET"} \
+            "${EXTRA_FLAGS[@]}" \
             --out json=/tmp/k6-results/results.json \
             --summary-export=/tmp/k6-results/summary.json
         k6_exit=$?

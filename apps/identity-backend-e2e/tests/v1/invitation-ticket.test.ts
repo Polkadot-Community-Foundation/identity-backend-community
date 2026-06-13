@@ -1,4 +1,4 @@
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { hc } from 'hono/client'
 import type { App } from 'identity-backend-container/v1'
 import { Binary } from 'polkadot-api'
@@ -60,9 +60,7 @@ describe('E2E: Invitation Ticket Claiming', () => {
         WAIT_CONFIG,
       )
 
-      checkResponse(claimResponse, 200)
-
-      const data = await claimResponse.json()
+      const data = await (await checkResponseWithBody(claimResponse, 200)).json()
       expect(data).toEqual(
         expect.objectContaining({
           inviter: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
@@ -128,9 +126,7 @@ describe('E2E: Invitation Ticket Claiming', () => {
         WAIT_CONFIG,
       )
 
-      checkResponse(claimResponse, 200)
-
-      const data = await claimResponse.json()
+      const data = await (await checkResponseWithBody(claimResponse, 200)).json()
       expect(data).toEqual(
         expect.objectContaining({
           inviter: '5GrwvaEF5zXb26Fz9rcQpDWS57CtERHpNehXCPcNoHGKutQY',
@@ -185,8 +181,7 @@ describe('E2E: Invitation Ticket Claiming', () => {
         json: { who: '5FHneW46xGXgs5mUiveU4sbTyGBzmstUspZC92UhjJM694ty', dim: 'Game' },
       })
 
-      expect(response.status).toBe(422)
-      const data = await response.json()
+      const data = await (await checkResponseWithBody(response, 422)).json()
       expect(data).toEqual(expect.objectContaining({ error: 'Pool exhausted' }))
     })
   })

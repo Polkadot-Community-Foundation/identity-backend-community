@@ -1,160 +1,29 @@
 import { pop_testnet } from '@identity-backend/descriptors'
-import { p256 } from '@noble/curves/nist.js'
+import {
+  createLitePersonSigner,
+  deriveLitePersonParams,
+  formatParams,
+  generateMnemonic,
+  type LitePersonParams,
+  type SetupResult,
+  setupWallets,
+} from '@identity-backend/people-lite-fixtures'
 import { getDynamicBuilder, getLookupFn } from '@polkadot-api/metadata-builders'
 import { type SystemEvent } from '@polkadot-api/observable-client'
 import { getPolkadotSigner, type PolkadotSigner } from '@polkadot-api/signer'
 import { decAnyMetadata, type HexString, unifyMetadata } from '@polkadot-api/substrate-bindings'
-
 import { sr25519CreateDerive } from '@polkadot-labs/hdkd'
-import {
-  blake2b256,
-  generateMnemonic,
-  type KeyPair,
-  mnemonicToEntropy,
-  mnemonicToMiniSecret,
-  ss58Decode,
-  ss58Encode,
-} from '@polkadot-labs/hdkd-helpers'
-import {
-  sr25519_derive_keypair_hard,
-  sr25519_pubkey,
-  sr25519_secret_from_seed,
-  sr25519_sign,
-} from '@polkadot-labs/schnorrkel-wasm'
+import { type KeyPair, mnemonicToMiniSecret } from '@polkadot-labs/hdkd-helpers'
 import { Effect } from 'effect'
-import { encodeHex } from 'effect/Encoding'
 import { customAlphabet } from 'nanoid'
 import { lowercase } from 'nanoid-dictionary'
 import { Binary, createClient, type PolkadotClient, type TypedApi } from 'polkadot-api'
 import { getWsProvider } from 'polkadot-api/ws'
 import { combineLatest, firstValueFrom, timeout } from 'rxjs'
 import { filter, map } from 'rxjs/operators'
-import { Bytes, Option, str, Tuple } from 'scale-ts'
-import { member_from_entropy, sign } from 'verifiablejs/nodejs'
 
-const DERIVATION_PATHS = {
-  wallet: '//polkadot//0',
-  candidate: '//wallet',
-  internalPayout: '//internal_payout//0',
-  mobRule: '//mob_rule//0',
-  identity: '//identity//0',
-  score: '//score//0',
-  chat: '//wallet//chat',
-}
-
-interface KeyPairWithPrivateKey {
-  publicKey: Uint8Array
-  privateKey: Uint8Array
-  sign: (message: Uint8Array) => Uint8Array
-}
-
-function deriveKeyPairWithPrivateKey(
-  miniSecret: Uint8Array,
-  derivationPaths: string[],
-): KeyPairWithPrivateKey {
-  let keypair = sr25519_secret_from_seed(miniSecret)
-
-  for (const path of derivationPaths) {
-    const chainCode = new Uint8Array(32)
-    const pathBytes = new TextEncoder().encode(path)
-    chainCode.set(pathBytes.slice(0, 32), 0)
-
-    const pubkey = sr25519_pubkey(keypair)
-    const fullKeypair = new Uint8Array(96)
-    fullKeypair.set(keypair, 0)
-    fullKeypair.set(pubkey, 64)
-
-    const derivedKeypair = sr25519_derive_keypair_hard(fullKeypair, chainCode)
-    keypair = derivedKeypair.slice(0, 64)
-  }
-
-  const publicKey = sr25519_pubkey(keypair)
-  const privateKey = keypair
-
-  return {
-    publicKey,
-    privateKey,
-    sign: (message: Uint8Array) => sr25519_sign(publicKey, privateKey, message),
-  }
-}
-
-const REGISTER_SIGNATURE_MESSAGE_PREFIX = 'pop:people-lite:register using'
-
-const P256_PUBLIC_KEY_SIZE = 65
-const ACCOUNT_ID_SIZE = 32
-const IDENTIFIER_KEY_SIZE = 65
-
-function createVerifiableEntropy(mnemonic: string): Uint8Array {
-  const entropy = mnemonicToEntropy(mnemonic)
-  return blake2b256(entropy)
-}
-
-function deriveP256IdentifierKeyFromSr25519(privateKey: Uint8Array): Uint8Array {
-  const p256PrivateKeySeed = blake2b256(privateKey)
-  const p256PublicKeyUncompressed = p256.getPublicKey(p256PrivateKeySeed, false)
-  const rawPublicKeyCoordinates = p256PublicKeyUncompressed.slice(1)
-
-  const identifierKey = new Uint8Array(P256_PUBLIC_KEY_SIZE)
-  identifierKey.set(rawPublicKeyCoordinates, 0)
-  return identifierKey
-}
-
-function buildRegistrationMessage(
-  candidatePublicKey: Uint8Array,
-  ringVrfKey: Uint8Array,
-): Uint8Array {
-  const prefixBytes = new TextEncoder().encode(REGISTER_SIGNATURE_MESSAGE_PREFIX)
-  return new Uint8Array([...prefixBytes, ...candidatePublicKey, ...ringVrfKey])
-}
-
-function buildResourcesSignatureData(
-  candidatePublicKey: Uint8Array,
-  verifierAccountId: Uint8Array,
-  identifierKey: Uint8Array,
-  username: string,
-): Uint8Array {
-  const codec = Tuple(
-    Bytes(ACCOUNT_ID_SIZE),
-    Bytes(ACCOUNT_ID_SIZE),
-    Bytes(IDENTIFIER_KEY_SIZE),
-    str,
-    Option(str),
-  )
-
-  return codec.enc([
-    candidatePublicKey,
-    verifierAccountId,
-    identifierKey,
-    username,
-    undefined,
-  ])
-}
-
-export interface SetupResult {
-  mainWallet: KeyPair
-  candidateWallet: KeyPair
-  internalPayout: KeyPair
-  mobRule: KeyPair
-  identity: KeyPair
-  score: KeyPair
-  verifiableEntropy: Uint8Array
-}
-
-export function setupWallets(mnemonic: string): SetupResult {
-  const miniSecret = mnemonicToMiniSecret(mnemonic, '')
-  const derive = sr25519CreateDerive(miniSecret)
-  const verifiableEntropy = createVerifiableEntropy(mnemonic)
-
-  return {
-    mainWallet: derive(DERIVATION_PATHS.wallet),
-    candidateWallet: derive(DERIVATION_PATHS.candidate),
-    internalPayout: derive(DERIVATION_PATHS.internalPayout),
-    mobRule: derive(DERIVATION_PATHS.mobRule),
-    identity: derive(DERIVATION_PATHS.identity),
-    score: derive(DERIVATION_PATHS.score),
-    verifiableEntropy,
-  }
-}
+export { createLitePersonSigner, deriveLitePersonParams, formatParams, generateMnemonic, setupWallets }
+export type { LitePersonParams, SetupResult }
 
 export function createPeopleSigner(
   keyPair: KeyPair,
@@ -176,68 +45,6 @@ export function createPeopleSigner(
 
       return baseSigner.signTx(callData, extensionsWithCustom, metadata, atBlockNumber, hasher)
     },
-  }
-}
-
-export interface LitePersonParams {
-  username: string
-  ringVrfKey: Uint8Array
-  candidateAccountId: string
-  candidateSignature: Uint8Array
-  consumerRegistrationSignature: Uint8Array
-  proofOfOwnership: Uint8Array
-  identifierKey: Uint8Array
-}
-
-export function deriveLitePersonParams(
-  mnemonic: string,
-  username: string,
-  verifierAddress: string,
-): LitePersonParams {
-  return createLitePersonSigner(mnemonic, verifierAddress)(username)
-}
-
-export function createLitePersonSigner(
-  mnemonic: string,
-  verifierAddress: string,
-): (username: string) => LitePersonParams {
-  const miniSecret = mnemonicToMiniSecret(mnemonic, '')
-  const derive = sr25519CreateDerive(miniSecret)
-  const verifiableEntropy = createVerifiableEntropy(mnemonic)
-
-  const candidateWallet = derive(DERIVATION_PATHS.candidate)
-  const candidatePublicKey = candidateWallet.publicKey
-
-  const ringVrfKey = member_from_entropy(verifiableEntropy)
-
-  const chatWallet = deriveKeyPairWithPrivateKey(miniSecret, ['wallet', 'chat'])
-  const identifierKey = deriveP256IdentifierKeyFromSr25519(chatWallet.privateKey)
-
-  const registrationMessage = buildRegistrationMessage(candidatePublicKey, ringVrfKey)
-  const candidateSignature = candidateWallet.sign(registrationMessage)
-  const proofOfOwnership = sign(verifiableEntropy, registrationMessage)
-
-  const [verifierAccountId] = ss58Decode(verifierAddress)
-  const candidateAccountId = ss58Encode(candidatePublicKey)
-
-  return (username: string): LitePersonParams => {
-    const resourcesSignatureData = buildResourcesSignatureData(
-      candidatePublicKey,
-      verifierAccountId,
-      identifierKey,
-      username,
-    )
-    const consumerRegistrationSignature = candidateWallet.sign(resourcesSignatureData)
-
-    return {
-      username,
-      ringVrfKey,
-      candidateAccountId,
-      candidateSignature,
-      consumerRegistrationSignature,
-      proofOfOwnership,
-      identifierKey,
-    }
   }
 }
 
@@ -325,8 +132,6 @@ export async function getEventsAtBlock(
   }
 }
 
-export { generateMnemonic }
-
 let pendingTransfer: Promise<void> = Promise.resolve()
 
 let sharedClient: { client: PolkadotClient; api: PopTestnetApi } | null = null
@@ -370,11 +175,6 @@ function detectStaleError(err: unknown): boolean {
   return false
 }
 
-/**
- * Retry a blockchain submission on Stale nonce errors.
- * The backend daemon races on Alice's account nonce, so transient Stale
- * failures are expected. Destroying the client forces a fresh nonce query.
- */
 async function submitWithStaleRetry<T>(
   submit: () => Promise<T>,
   opts: { maxRetries?: number; baseDelayMs?: number } = {},
@@ -460,18 +260,6 @@ export async function transferFunds(
 
 export function randomUsername(length = 13): string {
   return customAlphabet(lowercase)(length).toLowerCase()
-}
-
-export function formatParams(params: LitePersonParams) {
-  return {
-    candidateAccountId: params.candidateAccountId,
-    username: params.username,
-    candidateSignature: `0x${encodeHex(params.candidateSignature)}`,
-    ringVrfKey: `0x${encodeHex(params.ringVrfKey)}`,
-    proofOfOwnership: `0x${encodeHex(params.proofOfOwnership)}`,
-    consumerRegistrationSignature: `0x${encodeHex(params.consumerRegistrationSignature)}`,
-    identifierKey: `0x${encodeHex(params.identifierKey)}`,
-  }
 }
 
 export async function getStatus(

@@ -1,6 +1,8 @@
 import { Context, Effect, Either, Match } from 'effect'
 import type { MiddlewareHandler } from 'hono'
 import { AppAttestDispatchCommand, decideAppAttestDispatch } from '../app-attest/dispatch.workflow.js'
+import { decideAndroidAttestationRequirement } from './attestation-requirement.workflow.js'
+import { readAttestationChainPresence } from './attestation.middleware.js'
 import { decideAndroidDispatch } from './dispatch.js'
 
 export class AuthMiddlewareConfig extends Context.Tag('AuthMiddlewareConfig')<
@@ -20,11 +22,15 @@ export const makeAuthMiddleware = (
   playIntegrityMiddleware: MiddlewareHandler<any, string, {}>,
   // oxlint-disable-next-line typescript/no-explicit-any
   appAttestMiddleware: MiddlewareHandler<any, string, {}>,
+  // oxlint-disable-next-line typescript/no-explicit-any
+  androidAttestationMiddleware: MiddlewareHandler<any, string, {}>,
 ) =>
   Effect.gen(function*() {
     const config = yield* AuthMiddlewareConfig
     const { createMiddleware } = yield* Effect.promise(() => import('hono/factory'))
     const HonoCombine = yield* Effect.promise(() => import('hono/combine'))
+
+    const verifyThenPlayIntegrity = HonoCombine.every(androidAttestationMiddleware, playIntegrityMiddleware)
 
     const enforceAuthMiddleware = createMiddleware(async (c, next) => {
       const iosPackageHeader = c.req.header('Auth-iOS-Package')
@@ -62,7 +68,20 @@ export const makeAuthMiddleware = (
 
       return Match.value(decision).pipe(
         Match.tag('Skip', () => next()),
-        Match.tag('PlayIntegrity', () => playIntegrityMiddleware(c, next)),
+        Match.tag('PlayIntegrity', async () =>
+          Match.value(decideAndroidAttestationRequirement({
+            enforceAuth: config.enforceAuth,
+            chainPresent: await readAttestationChainPresence(c),
+          })).pipe(
+            Match.tag('VerifyChain', () => verifyThenPlayIntegrity(c, next)),
+            Match.tag('SkipVerification', () => playIntegrityMiddleware(c, next)),
+            Match.tag('MissingChain', () =>
+              c.json({
+                _tag: 'MissingAndroidAttestationChain',
+                error: 'Missing Android Attestation chain',
+              }, 401)),
+            Match.exhaustive,
+          )),
         Match.tag('KeyAttestation', () => next()),
         Match.tag('MissingAttestationType', () =>
           c.json({

@@ -2,8 +2,10 @@
  * @type {import('lint-staged').Configuration}
  */
 
-// Code the workspace toolchain must not lint or format: repos/ — vendored read-only git subtrees.
-const NOT_OUR_SOURCE = ['/repos/']
+// Code the workspace toolchain must not lint or format:
+// repos/ — vendored read-only git subtrees
+// infra/, sst.config.ts — SST injected globals, excluded by oxlint.config.ts
+const NOT_OUR_SOURCE = ['/repos/', '/infra/', 'sst.config.ts']
 
 const lintable = (filenames) => filenames.filter((f) => !NOT_OUR_SOURCE.some((p) => f.includes(p)))
 

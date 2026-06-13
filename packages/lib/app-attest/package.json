@@ -22,6 +22,10 @@
       "@identity-backend/source": "./src/certificates.ts",
       "default": "./dist/Certificates.mjs"
     },
+    "./testing": {
+      "@identity-backend/source": "./src/testing/mod.ts",
+      "default": "./dist/testing.mjs"
+    },
     "./package.json": "./package.json"
   },
   "files": [
@@ -68,6 +72,7 @@
       "./Assertion": "./dist/Assertion.mjs",
       "./Attestation": "./dist/Attestation.mjs",
       "./Certificates": "./dist/Certificates.mjs",
+      "./testing": "./dist/testing.mjs",
       "./package.json": "./package.json"
     }
   }

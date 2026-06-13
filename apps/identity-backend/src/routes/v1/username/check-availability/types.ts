@@ -1,7 +1,7 @@
 import { z } from '@hono/zod-openapi'
 
 export const CheckUsernameAvailabilityV1Request = z.object({
-  usernames: z.readonly(z.array(z.string())).openapi({
+  usernames: z.readonly(z.array(z.string()).max(100)).openapi({
     description: 'Base usernames to check. Do not include digit suffixes (e.g. `"alice"`, not `"alice.42"`).',
   }),
 }).openapi({

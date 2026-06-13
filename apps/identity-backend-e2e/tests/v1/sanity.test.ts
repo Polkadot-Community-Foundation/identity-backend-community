@@ -1,4 +1,4 @@
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { hc } from 'hono/client'
 import type { App } from 'identity-backend-container/v1'
 import { Binary } from 'polkadot-api'
@@ -89,8 +89,7 @@ function getStatusFromResponse(
         query: {},
         json: { usernames: [username1] },
       })
-      checkResponse(availabilityBefore, 200)
-      const beforeData = await availabilityBefore.json()
+      const beforeData = await (await checkResponseWithBody(availabilityBefore, 200)).json()
       expect(
         getStatusFromResponse(beforeData as AvailabilityResponse, username1),
         'Pre-condition: Username should be available before registration',
@@ -103,9 +102,7 @@ function getStatusFromResponse(
         header: {},
         json: formatParams(params1),
       })
-      checkResponse(registrationResponse, 202)
-
-      const registrationData = await registrationResponse.json()
+      const registrationData = await (await checkResponseWithBody(registrationResponse, 202)).json()
       const fullUsername1 = registrationData.username
 
       expect(registrationData).toMatchObject({
@@ -154,8 +151,7 @@ function getStatusFromResponse(
         query: {},
         json: { usernames: [username1] },
       })
-      checkResponse(availabilityAfter, 200)
-      const afterData = await availabilityAfter.json()
+      const afterData = await (await checkResponseWithBody(availabilityAfter, 200)).json()
       expect(
         getStatusFromResponse(afterData as AvailabilityResponse, username1),
         'Username should still be AVAILABLE after 1 registration (99 slots remaining)',
@@ -171,8 +167,7 @@ function getStatusFromResponse(
         header: {},
         json: formatParams(params2),
       })
-      checkResponse(response2, 202)
-      const data2 = await response2.json()
+      const data2 = await (await checkResponseWithBody(response2, 202)).json()
 
       expect(data2.base_username).toBe(username1)
       expect(data2.digits, 'Second user should receive different digit suffix').not.toBe(

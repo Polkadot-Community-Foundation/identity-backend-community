@@ -13,8 +13,15 @@ export class TokenBucketRateLimiterConfig extends Context.Reference<TokenBucketR
 ) {}
 
 export namespace TokenBucketRateLimiter {
+  export interface TryConsumeConfig {
+    readonly bucketSize: number
+    readonly tokensPerSec: number
+  }
   export interface Service {
-    readonly tryConsume: (fingerprint: readonly string[]) => Effect.Effect<boolean>
+    readonly tryConsume: (
+      fingerprint: readonly string[],
+      config?: TryConsumeConfig,
+    ) => Effect.Effect<boolean>
   }
 }
 
@@ -22,20 +29,21 @@ const make = Effect.gen(function*() {
   const config = yield* TokenBucketRateLimiterConfig
   const state = yield* Ref.make(HashMap.empty<string, BucketState>())
 
-  const tryConsume: TokenBucketRateLimiter.Service['tryConsume'] = (fingerprint) =>
+  const tryConsume: TokenBucketRateLimiter.Service['tryConsume'] = (fingerprint, overrideConfig) =>
     Effect.gen(function*() {
       const now = new Date(yield* Clock.currentTimeMillis)
       const key = fingerprint.join('|')
+      const { bucketSize, tokensPerSec } = overrideConfig ?? config
 
       return yield* Ref.modify(state, (buckets) => {
         const bucket = pipe(
           HashMap.get(buckets, key),
-          Option.getOrElse(() => BucketState.make({ tokens: config.bucketSize, lastRefill: now })),
+          Option.getOrElse(() => BucketState.make({ tokens: bucketSize, lastRefill: now })),
         )
 
         const refilled = pipe(
           bucket,
-          refillBucket(RefillOptions.make({ tokensPerSec: config.tokensPerSec, bucketSize: config.bucketSize, now })),
+          refillBucket(RefillOptions.make({ tokensPerSec, bucketSize, now })),
         )
         const [allowed, remaining] = consumeToken(refilled)
         return [allowed, HashMap.set(buckets, key, remaining)] as const
@@ -53,12 +61,12 @@ export class TokenBucketRateLimiter extends Context.Tag('TokenBucketRateLimiter'
 }
 
 class BucketState extends S.Class<BucketState>('BucketState')({
-  tokens: S.NonNegativeInt,
+  tokens: S.Number.pipe(S.nonNegative(), S.finite()),
   lastRefill: S.ValidDateFromSelf,
 }) {}
 
 class RefillOptions extends S.Class<RefillOptions>('RefillOptions')({
-  tokensPerSec: S.Number.pipe(S.int(), S.positive()),
+  tokensPerSec: S.Number.pipe(S.positive(), S.finite()),
   bucketSize: S.Number.pipe(S.int(), S.greaterThanOrEqualTo(1)),
   now: S.ValidDateFromSelf,
 }) {}

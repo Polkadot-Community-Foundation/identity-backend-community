@@ -49,6 +49,7 @@
     "@identity-backend/oxlint-config": "workspace:^",
     "@identity-backend/testing": "workspace:^",
     "@identity-backend/rx-effect": "workspace:^",
+    "@identity-backend/tx-events": "workspace:^",
     "@identity-backend/vitest-config": "workspace:^",
     "@polkadot-labs/hdkd": "0.0.19",
     "@polkadot-labs/hdkd-helpers": "0.0.19",

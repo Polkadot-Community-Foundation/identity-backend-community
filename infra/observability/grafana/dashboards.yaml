@@ -1,0 +1,11 @@
+apiVersion: 1
+
+providers:
+  - name: identity-backend
+    type: file
+    disableDeletion: false
+    updateIntervalSeconds: 30
+    allowUiUpdates: true
+    options:
+      path: /otel-lgtm/grafana/conf/provisioning/dashboards/identity-backend
+      foldersFromFilesStructure: false

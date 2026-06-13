@@ -1,1 +1,1 @@
-export * from './services/challenge/types.js'
+export { ChallengeRejectedError, ChallengeRejectReason } from './services/challenge/challenge.schema.js'

@@ -6,7 +6,7 @@ import { toHex } from '@polkadot-api/utils'
 import { Cause, Effect, Exit, pipe, Runtime } from 'effect'
 import { etag } from 'hono/etag'
 
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
+import { bridgeSpanContext } from '@identity-backend/observability'
 
 const makeAttesterRouteWithoutDependencies = Effect.gen(function*() {
   const runtime = yield* Effect.runtime()

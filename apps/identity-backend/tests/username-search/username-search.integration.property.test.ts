@@ -46,7 +46,7 @@ describe('PaginationInvariants', () => {
   type Client = Effect.Effect.Success<typeof makeClient>
 
   const makeSearchFetcher = (client: Client, prefix: string, limit: number) => (cursor: string | undefined) =>
-    Effect.promise(() => client.search.$get({ query: { prefix, limit, ...(cursor && { cursor }) } })).pipe(
+    Effect.promise(() => client.search.$get({ header: {}, query: { prefix, limit, ...(cursor && { cursor }) } })).pipe(
       Effect.filterOrDie(
         (res): res is Extract<typeof res, { status: 200 }> => res.status === 200,
         () => new Error('Expected 200 response'),
@@ -118,15 +118,17 @@ describe('PaginationInvariants', () => {
 
         // --- @act: Fetch first page, then reuse the same cursor twice concurrently ---
         const client = yield* makeClient
-        const res1 = yield* Effect.promise(() => client.search.$get({ query: { prefix: 'idem', limit: 5 } }))
+        const res1 = yield* Effect.promise(() =>
+          client.search.$get({ header: {}, query: { prefix: 'idem', limit: 5 } })
+        )
         checkResponse(res1, 200)
         const body1 = yield* Effect.promise(() => res1.json())
         expect(body1.nextCursor, 'should have next cursor').not.toBeNull()
 
         const cursor = body1.nextCursor!
         const [res2, res3] = yield* Effect.all([
-          Effect.promise(() => client.search.$get({ query: { prefix: 'idem', limit: 5, cursor } })),
-          Effect.promise(() => client.search.$get({ query: { prefix: 'idem', limit: 5, cursor } })),
+          Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'idem', limit: 5, cursor } })),
+          Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'idem', limit: 5, cursor } })),
         ])
         checkResponse(res2, 200)
         checkResponse(res3, 200)

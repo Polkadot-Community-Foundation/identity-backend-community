@@ -22,7 +22,7 @@
  */
 
 import { previewnet_asset_hub } from '@identity-backend/descriptors'
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { Bytes, Option, Tuple } from '@polkadot-api/substrate-bindings'
 import { sr25519CreateDerive } from '@polkadot-labs/hdkd'
 import { mnemonicToMiniSecret, ss58Decode } from '@polkadot-labs/hdkd-helpers'
@@ -139,7 +139,7 @@ const WAIT_CONFIG = { timeout: 180_000, interval: 2_000 }
           header: {},
           json: { ...formatParams(params), preferredDigits, dotns: { signature: dotnsSignature, signedAt } },
         })
-        checkResponse(response, 202)
+        await checkResponseWithBody(response, 202)
 
         const liteLabelBytes = Binary.fromText(liteLabel)
         const storedOwner = await vi.waitUntil(

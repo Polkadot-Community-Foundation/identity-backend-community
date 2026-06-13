@@ -82,7 +82,9 @@ async function waitForAssigned(
 }
 
 async function nukeDatabase(adminUrl: string): Promise<AdminNukeResponse> {
-  const auth = Buffer.from('swagger:swagger').toString('base64')
+  const adminUser = process.env.ADMIN_USERNAME ?? 'admin'
+  const adminPassword = process.env.ADMIN_PASSWORD ?? 'admin'
+  const auth = Buffer.from(`${adminUser}:${adminPassword}`).toString('base64')
   const response = await fetch(adminUrl, {
     method: 'POST',
     headers: { Authorization: `Basic ${auth}` },

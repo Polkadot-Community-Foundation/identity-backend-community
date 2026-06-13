@@ -1,3 +1,4 @@
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import type { StartedDockerComposeEnvironment } from 'testcontainers'
 import { afterAll, beforeAll, describe, expect, it } from 'vitest'
 import { setupTestEnvironment, teardownTestEnvironment } from './setup.ts'
@@ -17,18 +18,12 @@ describe.concurrent('E2E: Swagger OpenAPI Endpoint', () => {
   })
 
   describe('GET /api/swagger/json', () => {
-    it('Should_ReturnOpenAPI31Spec_When_Authenticated', async () => {
-      // --- @arrange: Basic auth credentials ---
-      const auth = { username: 'swagger', password: 'swagger' }
-
-      // --- @act: Request OpenAPI spec ---
-      const response = await fetch(`${baseUrl}/api/swagger/json`, {
-        headers: { Authorization: `Basic ${btoa(`${auth.username}:${auth.password}`)}` },
-      })
+    it('Should_ReturnOpenAPI31Spec_When_Requested', async () => {
+      // --- @act: Request OpenAPI spec (public — no auth; the schema is open source) ---
+      const response = await fetch(`${baseUrl}/api/swagger/json`)
 
       // --- @assert: Verify response structure ---
-      expect(response.status).toBe(200)
-      const spec = await response.json()
+      const spec = await (await checkResponseWithBody(response, 200)).json()
 
       expect(spec, 'OpenAPI spec must have version').toHaveProperty('openapi')
       expect(spec.openapi, 'Must be OpenAPI 3.1').toMatch(/^3\.1\./)
@@ -39,27 +34,6 @@ describe.concurrent('E2E: Swagger OpenAPI Endpoint', () => {
 
       const pathCount = Object.keys(spec.paths || {}).length
       expect(pathCount, 'Should have API paths defined').toBeGreaterThan(0)
-    })
-
-    it('Should_Return401_When_MissingAuth', async () => {
-      // --- @act: Request without authentication ---
-      const response = await fetch(`${baseUrl}/api/swagger/json`)
-
-      // --- @assert: Must return 401 Unauthorized ---
-      expect(response.status).toBe(401)
-    })
-
-    it('Should_Return401_When_InvalidAuth', async () => {
-      // --- @arrange: Wrong credentials ---
-      const auth = { username: 'wrong', password: 'credentials' }
-
-      // --- @act: Request with invalid auth ---
-      const response = await fetch(`${baseUrl}/api/swagger/json`, {
-        headers: { Authorization: `Basic ${btoa(`${auth.username}:${auth.password}`)}` },
-      })
-
-      // --- @assert: Must return 401 Unauthorized ---
-      expect(response.status).toBe(401)
     })
   })
 })

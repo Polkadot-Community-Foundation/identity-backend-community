@@ -3,3 +3,10 @@ node_modules/
 baselines/*
 !baselines/.gitkeep
 !baselines/*.json
+
+# Generated fixtures (written by the seed / discovery / payload-gen / token steps).
+# Contain throwaway testnet mnemonics and JWTs — never commit.
+prefixes.json
+register-payloads.json
+register-payloads.jsonl
+jwt-tokens.json

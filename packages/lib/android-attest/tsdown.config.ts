@@ -4,6 +4,7 @@ export default defineConfig({
   clean: false,
   entry: {
     index: './src/mod.ts',
+    testing: './src/testing/mod.ts',
   },
   exports: {
     devExports: '@identity-backend/source',

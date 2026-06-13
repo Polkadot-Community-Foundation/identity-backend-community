@@ -10,7 +10,15 @@ export namespace GetConnInfo {
 
 export class GetConnInfo extends Context.Tag(
   '@identity-backend/middleware/logger/GetConnInfo',
-)<GetConnInfo, GetConnInfo.GetConnInfo>() {}
+)<GetConnInfo, GetConnInfo.GetConnInfo>() {
+  static readonly Default = Layer.effect(
+    GetConnInfo,
+    Effect.gen(function*() {
+      const { getConnInfo } = yield* Effect.promise(() => import('hono/bun'))
+      return getConnInfo
+    }),
+  )
+}
 
 export namespace LoggerConfig {
   export type RequestIdVariables = requestId.RequestIdVariables
@@ -120,14 +128,7 @@ export class Logger extends Effect.Service<Logger>()(
       }) satisfies Service as Service
     }),
     dependencies: [
-      Layer.effect(
-        GetConnInfo,
-        Effect.gen(function*() {
-          const { getConnInfo } = yield* Effect.promise(() => import('hono/bun'))
-
-          return getConnInfo
-        }),
-      ),
+      GetConnInfo.Default,
       Layer.effect(
         LoggerConfig,
         Effect.gen(function*() {
@@ -136,14 +137,7 @@ export class Logger extends Effect.Service<Logger>()(
           const rng = yield* Effect.random
 
           return {
-            additionalHeaders: HashSet.fromIterable([
-              'Auth-Android-Package',
-              'Auth-Attestation-Type',
-              'Auth-Payload',
-              'Auth-Challenge',
-              'Auth-iOS-Package',
-              'Auth-iOS-KeyId',
-            ]),
+            additionalHeaders: HashSet.empty(),
             makeIncomingMessage: () => Effect.succeed('<--- Incoming Request (Sampled)'),
             makeOutgoingMessage: () => Effect.succeed('---> Outgoing Response (Sampled)'),
             makeShouldLog: (c) =>

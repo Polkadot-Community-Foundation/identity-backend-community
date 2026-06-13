@@ -1,11 +1,16 @@
 import { DeviceCheckService } from '@identity-backend/auth/services'
-import { makeDeviceCheckMiddleware } from '@identity-backend/hono-auth/device-check'
+import {
+  DEVICE_CHECK_DECISION_VAR,
+  DeviceCheckProceed,
+  type DeviceCheckVariables,
+  makeDeviceCheckMiddleware,
+} from '@identity-backend/hono-auth/device-check'
 import { Context, Effect, Layer, Option } from 'effect'
 import { createMiddleware } from 'hono/factory'
 
 export class DeviceCheckIOSMiddlewareConfig extends Context.Tag('app/DeviceCheckIOSMiddlewareConfig')<
   DeviceCheckIOSMiddlewareConfig,
-  { enabled: boolean }
+  { enabled: boolean; enforceAuth: boolean }
 >() {}
 
 export const makeDeviceCheckIOSMiddlewareWithoutDependencies = (headerName: string) =>
@@ -13,7 +18,10 @@ export const makeDeviceCheckIOSMiddlewareWithoutDependencies = (headerName: stri
     const config = yield* DeviceCheckIOSMiddlewareConfig
 
     if (!config.enabled) {
-      return createMiddleware(async (_c, next) => next())
+      return createMiddleware<{ Variables: DeviceCheckVariables }>(async (c, next) => {
+        c.set(DEVICE_CHECK_DECISION_VAR, new DeviceCheckProceed({ available: Option.none() }))
+        return next()
+      })
     }
 
     const deviceCheckOption = yield* Effect.serviceOption(DeviceCheckService)
@@ -23,7 +31,10 @@ export const makeDeviceCheckIOSMiddlewareWithoutDependencies = (headerName: stri
       )
     }
 
-    const deviceCheckMiddleware = yield* makeDeviceCheckMiddleware({ headerName }).pipe(
+    const deviceCheckMiddleware = yield* makeDeviceCheckMiddleware({
+      headerName,
+      enforceAuth: config.enforceAuth,
+    }).pipe(
       Effect.provideService(DeviceCheckService, deviceCheckOption.value),
     )
 
@@ -36,9 +47,10 @@ export const makeDeviceCheckIOSMiddleware = (headerName: string) =>
       Layer.effect(
         DeviceCheckIOSMiddlewareConfig,
         Effect.gen(function*() {
-          const { DEVICE_CHECK_IOS_ENABLED } = yield* Effect.promise(() => import('#root/config.js'))
+          const { DEVICE_CHECK_IOS_ENABLED, ENFORCE_AUTH } = yield* Effect.promise(() => import('#root/config.js'))
           const enabled = yield* DEVICE_CHECK_IOS_ENABLED
-          return { enabled }
+          const enforceAuth = yield* ENFORCE_AUTH
+          return { enabled, enforceAuth }
         }),
       ),
     ),

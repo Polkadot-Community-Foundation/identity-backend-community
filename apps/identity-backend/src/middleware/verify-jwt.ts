@@ -64,7 +64,7 @@ const verifyToken = async (token: string, secret: string) => {
   }
 }
 
-interface JwtEnv {
+export interface JwtEnv {
   Variables: {
     jwtSub: string
     jwtPlatform?: 'ios' | 'android'

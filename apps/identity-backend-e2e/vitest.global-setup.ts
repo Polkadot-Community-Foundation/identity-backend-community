@@ -1,4 +1,4 @@
-import { execFileSync, execSync } from 'node:child_process'
+import { execSync } from 'node:child_process'
 import { existsSync } from 'node:fs'
 import { createConnection } from 'node:net'
 import { dirname, join } from 'node:path'
@@ -56,72 +56,12 @@ async function ensureImagesBuilt(monorepoRoot: string) {
   })
 }
 
-const OTEL_COLLECTOR_CONTAINER = process.env.E2E_OTEL_CONTAINER ?? 'e2e-otel-collector'
-
-function dumpOtelCollectorLogs() {
-  try {
-    const logs = execSync(`docker logs ${OTEL_COLLECTOR_CONTAINER} 2>&1 | tail -60`, { encoding: 'utf8' })
-    console.error(`=== ${OTEL_COLLECTOR_CONTAINER} logs ===\n${logs}=== end ===`)
-  } catch {
-    console.error(`failed to read ${OTEL_COLLECTOR_CONTAINER} logs`)
-  }
-}
-
-const OTEL_TRACES_VOLUME = process.env.E2E_OTEL_VOLUME ?? 'e2e-traces'
-const TEST_NETWORK = process.env.E2E_TEST_NETWORK ?? 'test-network'
-
-function isCollectorRunning(): boolean {
-  try {
-    const status = execSync(`docker inspect --format '{{.State.Status}}' ${OTEL_COLLECTOR_CONTAINER}`, {
-      encoding: 'utf8',
-      stdio: ['ignore', 'pipe', 'ignore'],
-    }).trim()
-    return status === 'running'
-  } catch {
-    return false
-  }
-}
-
 async function ensureOtelCollectorRunning(monorepoRoot: string) {
   if (process.env.OTEL_ENABLED !== 'true') return
-  const hostPort = process.env.OTEL_COLLECTOR_HOST_PORT ?? '43188'
+  if (process.env.OTEL_EXPORTER_OTLP_ENDPOINT) return
 
-  if (isCollectorRunning() && (await isPortOpen('localhost', Number(hostPort)))) return
-
-  const configPath = join(monorepoRoot, 'docker/test/e2e/otelcol-config.yml')
-  const lockFile = process.env.E2E_OTEL_LOCKFILE ?? `/tmp/${OTEL_COLLECTOR_CONTAINER}.lock`
-  const setupScript = [
-    'set -eu',
-    `if [ "$(docker inspect --format '{{.State.Status}}' ${OTEL_COLLECTOR_CONTAINER} 2>/dev/null)" = "running" ]; then exit 0; fi`,
-    `docker rm -f ${OTEL_COLLECTOR_CONTAINER} >/dev/null 2>&1 || true`,
-    `docker volume create ${OTEL_TRACES_VOLUME} >/dev/null`,
-    // Under userns-remap, volume root is owned by 0:0; collector runs as uid 10001 and would EACCES. Pre-chown.
-    `docker run --rm -v ${OTEL_TRACES_VOLUME}:/traces alpine chown 10001:10001 /traces`,
-    `docker network inspect ${TEST_NETWORK} >/dev/null 2>&1 || docker network create ${TEST_NETWORK} >/dev/null`,
-    `docker run -d --name ${OTEL_COLLECTOR_CONTAINER} ` +
-    `--network ${TEST_NETWORK} ` +
-    `-v "${configPath}:/etc/otelcol/config.yaml:ro" ` +
-    `-v ${OTEL_TRACES_VOLUME}:/traces ` +
-    `-p ${hostPort}:4318 ` +
-    `otel/opentelemetry-collector-contrib:0.150.1 --config=/etc/otelcol/config.yaml`,
-  ].join('\n')
-  execFileSync('flock', [lockFile, 'bash', '-c', setupScript], { stdio: 'inherit' })
-  const deadline = Date.now() + 15_000
-  while (Date.now() < deadline) {
-    if (await isPortOpen('localhost', Number(hostPort))) {
-      const status = execSync(`docker inspect --format '{{.State.Status}}' ${OTEL_COLLECTOR_CONTAINER}`, {
-        encoding: 'utf8',
-      }).trim()
-      if (status !== 'running') {
-        dumpOtelCollectorLogs()
-        throw new Error(`OTEL collector exited before readiness (status=${status})`)
-      }
-      return
-    }
-    await new Promise((r) => setTimeout(r, 500))
-  }
-  dumpOtelCollectorLogs()
-  throw new Error(`OTEL collector did not bind :${hostPort} within 15s`)
+  const script = join(monorepoRoot, 'docker/test/e2e/otel-collector-up.sh')
+  process.env.OTEL_EXPORTER_OTLP_ENDPOINT = execSync(`bash "${script}"`, { encoding: 'utf8' }).trim()
 }
 
 async function ensureIntegreSQLRunning(monorepoRoot: string) {

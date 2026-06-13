@@ -1,8 +1,8 @@
 import {
   DEBUG_HEAPDUMP_COOLDOWN_SECONDS,
   DEBUG_HEAPDUMP_ENABLED,
-  SWAGGER_PASSWORD,
-  SWAGGER_USERNAME,
+  DEBUG_PASSWORD,
+  DEBUG_USERNAME,
 } from '#root/config.js'
 import { Config, Effect, Redacted } from 'effect'
 import { Hono } from 'hono'
@@ -74,8 +74,8 @@ export const makeDebugHeapdumpRoute = Effect.gen(function* makeDebugHeapdumpRout
   const enabled = yield* DEBUG_HEAPDUMP_ENABLED
   if (!enabled) return makeDisabledRoute()
   const [username, password, cooldownSec] = yield* Config.all([
-    SWAGGER_USERNAME,
-    SWAGGER_PASSWORD,
+    DEBUG_USERNAME,
+    DEBUG_PASSWORD,
     DEBUG_HEAPDUMP_COOLDOWN_SECONDS,
   ])
   const { getHeapSnapshot } = yield* Effect.promise(() => import('node:v8'))

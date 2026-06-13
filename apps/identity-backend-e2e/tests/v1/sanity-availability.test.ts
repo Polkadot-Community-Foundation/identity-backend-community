@@ -1,4 +1,4 @@
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { hc } from 'hono/client'
 import type { App } from 'identity-backend-container/v1'
 import type { StartedDockerComposeEnvironment } from 'testcontainers'
@@ -48,9 +48,7 @@ function getStatusFromResponse(
         query: {},
         json: { usernames: invalidUsernames },
       })
-      checkResponse(response, 200)
-
-      const data = await response.json()
+      const data = await (await checkResponseWithBody(response, 200)).json()
       for (const username of invalidUsernames) {
         const status = getStatusFromResponse(data as AvailabilityResponse, username)
         expect(status as AvailabilityStatus, `'${username}' should be INVALID`).toBe('INVALID')

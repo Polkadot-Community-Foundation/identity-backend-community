@@ -38,10 +38,15 @@ export const TokenRequestHeaders = z
         'Android package name. Required for Android Play Integrity clients when platform attestation is enforced; must be absent for iOS and key-attestation.',
       example: 'com.example.app',
     }),
-    'Auth-Attestation-Type': z.optional(z.enum(['play-integrity', 'key-attestation'])).openapi({
+    'Auth-Attestation-Type': z.optional(z.enum(['play-integrity', 'key-attestation', 'voucher'])).openapi({
       description:
-        "Android attestation dispatch header. Conditionally required: must be present when Auth-Android-Package or attestationChain body is provided. Use 'play-integrity' with Auth-Android-Package and Auth-Payload; use 'key-attestation' with attestationChain in the request body. Ignored for iOS.",
+        "Android attestation dispatch header. Conditionally required: must be present when Auth-Android-Package or attestationChain body is provided. Use 'play-integrity' with Auth-Android-Package and Auth-Payload; use 'key-attestation' with attestationChain in the request body; use 'voucher' with Auth-Voucher-Secret. Ignored for iOS.",
       example: 'key-attestation',
+    }),
+    'Auth-Voucher-Secret': z.optional(z.string()).openapi({
+      description:
+        'Voucher secret scanned from a paper QR (base64-encoded, 32 bytes). Required when Auth-Attestation-Type is voucher. Single-use.',
+      example: 'obLD1OG/RrOWYNaGvNfIraXKzGVY01SyiaSKsAl0qAY=',
     }),
   })
   .refine(
@@ -57,6 +62,7 @@ export const TokenRequestHeaders = z
     challenge: decodeBase64(h['Auth-Challenge']),
     iosPackage: h['Auth-iOS-Package'],
     authAttestationType: h['Auth-Attestation-Type'],
+    voucherSecret: h['Auth-Voucher-Secret'],
   }))
   .openapi({ title: 'TokenRequestHeaders' })
 

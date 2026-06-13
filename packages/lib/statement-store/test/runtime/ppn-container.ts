@@ -1,5 +1,6 @@
 import { previewnet_people } from '@identity-backend/descriptors'
 import { fromObservable } from '@identity-backend/rx-effect'
+import { logTxEvent, runTxFinalized, watchThroughReorgs } from '@identity-backend/tx-events'
 import { Binary } from '@polkadot-api/substrate-bindings'
 import { toHex } from '@polkadot-api/utils'
 import { sr25519CreateDerive } from '@polkadot-labs/hdkd'
@@ -11,11 +12,11 @@ import { getWsProvider } from 'polkadot-api/ws'
 import { GenericContainer, type StartedTestContainer, Wait } from 'testcontainers'
 import { aliceSignerPubkey } from '../fixtures/signed-statement-builder.js'
 import {
+  grantAllowanceInclusionTimeout,
   grantAllowanceRpcTimeout,
   grantAllowanceTxFinalizationTimeout,
   ppnContainerStartupTimeoutMillis,
 } from '../harness/timings.js'
-import { logTxEvent, runTxFinalized, watchThroughReorgs } from './tx-events.js'
 
 export const PPN_IMAGE = process.env['PPN_IMAGE'] ?? 'paritytech/ppn:latest'
 export const PEOPLE_WS_PORT = 10010
@@ -146,7 +147,10 @@ export const grantStatementAllowance = (wsUrl: string) =>
           stream,
           Stream.tap(logTxEvent),
           watchThroughReorgs,
-          runTxFinalized({ timeout: grantAllowanceTxFinalizationTimeout }),
+          runTxFinalized({
+            inclusionTimeout: grantAllowanceInclusionTimeout,
+            finalizationTimeout: grantAllowanceTxFinalizationTimeout,
+          }),
         )
       ),
     )

@@ -106,8 +106,8 @@ describe('admin route gating', () => {
     ['ADMIN_ROUTE_ENABLED', 'true'],
     ['DEVICE_CHECK_RESET_ENABLED', String(resetEnabled)],
     ['DEVICE_CHECK_IOS_ENABLED', String(iosEnabled)],
-    ['SWAGGER_USERNAME', 'admin'],
-    ['SWAGGER_PASSWORD', 'secret'],
+    ['ADMIN_USERNAME', 'admin'],
+    ['ADMIN_PASSWORD', 'secret'],
   ]
 
   const adminAuthHeader = 'Basic ' + Buffer.from('admin:secret').toString('base64')

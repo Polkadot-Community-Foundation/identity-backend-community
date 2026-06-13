@@ -1,10 +1,18 @@
 import { TransactionSubmitError } from '#root/data/mod.js'
-import type { TxBestBlockNotIncludedError, TxFinalizationError } from '#root/infrastructure/tx-event.io.js'
+import type { FinalizedTransaction } from '#root/infrastructure/adapters/blockchain/finalized-transaction.schema.js'
+import type {
+  TxBestBlockNotIncludedError,
+  TxFinalizationError,
+  TxInclusionTimeoutError,
+} from '@identity-backend/tx-events'
 import { Either, Match, Option, Schema as S } from 'effect'
-import type { TxFinalized } from 'polkadot-api'
 import { type BatchOutcome, OtherFailure, ResourceExhausted, Succeeded } from './batch-backoff.schema.js'
 
-export type KnownTxError = TransactionSubmitError | TxBestBlockNotIncludedError | TxFinalizationError
+export type KnownTxError =
+  | TransactionSubmitError
+  | TxBestBlockNotIncludedError
+  | TxFinalizationError
+  | TxInclusionTimeoutError
 
 const ValidityExhaustion = S.Struct({
   type: S.Literal('Invalid'),
@@ -30,7 +38,7 @@ export const outcomeFromCause = (cause: unknown): BatchOutcome =>
     onSome: () => new ResourceExhausted({}),
   })
 
-export const outcomeFromTxResult = (result: Either.Either<TxFinalized, KnownTxError>): BatchOutcome =>
+export const outcomeFromTxResult = (result: Either.Either<FinalizedTransaction, KnownTxError>): BatchOutcome =>
   Either.match(result, {
     onLeft: (error) =>
       Match.value(error).pipe(
@@ -39,8 +47,8 @@ export const outcomeFromTxResult = (result: Either.Either<TxFinalized, KnownTxEr
       ),
     onRight: (finalized) =>
       Match.value(finalized).pipe(
-        Match.when({ ok: true }, () => new Succeeded({})),
-        Match.when({ ok: false }, () => new OtherFailure({})),
+        Match.tag('TransactionIncluded', () => new Succeeded({})),
+        Match.tag('TransactionReverted', () => new OtherFailure({})),
         Match.exhaustive,
       ),
   })

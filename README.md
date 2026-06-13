@@ -1,6 +1,9 @@
 > [!WARNING]
 > The following is a prototype, reference implementation, and proof-of-concept. This open source code is provided for research, experimentation, and developer education only. This code has not been audited, is actively experimental, and may contain bugs, vulnerabilities, or incomplete features. Use at your own risk.
 
+> [!IMPORTANT]
+> **Are you a deploy operator?** You are in the right place, but this README is for contributors and developers. For production deploys read **[`infra/README.md`](./infra/README.md)** first — it has the Quick Start, the per-topic walkthroughs, the two-knob reference, the cost notes, and the pinned-version table. The single best next page for a new operator is **[`infra/docs/first-time-setup.md`](./infra/docs/first-time-setup.md)** — 42 stuck points called out before you hit them, from "I have AWS and a credit card" to "the API responds 200".
+
 # Polkadot App Backend
 
 Backend-for-Frontend monorepo for the Polkadot mobile app.

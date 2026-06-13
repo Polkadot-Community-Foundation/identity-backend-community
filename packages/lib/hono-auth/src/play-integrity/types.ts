@@ -14,50 +14,61 @@ import { Schema as S } from 'effect'
  *                    sideloaded builds) and licensing (allow
  *                    `UNLICENSED`).
  */
-export const PlayIntegrityMode = S.Literal(
-  'strict',
-  'relaxed_device',
-  'relaxed_all',
+export type PlayIntegrityMode = 'strict' | 'relaxed_device' | 'relaxed_all'
+export const PlayIntegrityMode: S.Schema<PlayIntegrityMode> = S.Literal(
+  'strict' as const,
+  'relaxed_device' as const,
+  'relaxed_all' as const,
 )
 
-export type PlayIntegrityMode = S.Schema.Type<typeof PlayIntegrityMode>
-
-export const AppRecognitionVerdict = S.Literal(
-  'PLAY_RECOGNIZED',
-  'UNRECOGNIZED_VERSION',
-  'UNEVALUATED',
+export type AppRecognitionVerdict = 'PLAY_RECOGNIZED' | 'UNRECOGNIZED_VERSION' | 'UNEVALUATED'
+export const AppRecognitionVerdict: S.Schema<AppRecognitionVerdict> = S.Literal(
+  'PLAY_RECOGNIZED' as const,
+  'UNRECOGNIZED_VERSION' as const,
+  'UNEVALUATED' as const,
 )
-export type AppRecognitionVerdict = S.Schema.Type<typeof AppRecognitionVerdict>
 
-export const DeviceRecognitionVerdict = S.Literal(
-  'MEETS_DEVICE_INTEGRITY',
-  'MEETS_BASIC_INTEGRITY',
-  'MEETS_STRONG_INTEGRITY',
-  'MEETS_VIRTUAL_INTEGRITY',
+export type DeviceRecognitionVerdict =
+  | 'MEETS_DEVICE_INTEGRITY'
+  | 'MEETS_BASIC_INTEGRITY'
+  | 'MEETS_STRONG_INTEGRITY'
+  | 'MEETS_VIRTUAL_INTEGRITY'
+export const DeviceRecognitionVerdict: S.Schema<DeviceRecognitionVerdict> = S.Literal(
+  'MEETS_DEVICE_INTEGRITY' as const,
+  'MEETS_BASIC_INTEGRITY' as const,
+  'MEETS_STRONG_INTEGRITY' as const,
+  'MEETS_VIRTUAL_INTEGRITY' as const,
 )
-export type DeviceRecognitionVerdict = S.Schema.Type<typeof DeviceRecognitionVerdict>
 
-export const AppLicensingVerdict = S.Literal(
-  'LICENSED',
-  'UNLICENSED',
-  'UNEVALUATED',
+export type AppLicensingVerdict = 'LICENSED' | 'UNLICENSED' | 'UNEVALUATED'
+export const AppLicensingVerdict: S.Schema<AppLicensingVerdict> = S.Literal(
+  'LICENSED' as const,
+  'UNLICENSED' as const,
+  'UNEVALUATED' as const,
 )
-export type AppLicensingVerdict = S.Schema.Type<typeof AppLicensingVerdict>
+
+export type PlayIntegrityErrorCode =
+  | 'APP_INTEGRITY_FAILED'
+  | 'DEVICE_INTEGRITY_FAILED'
+  | 'LICENSE_CHECK_FAILED'
+  | 'APK_FINGERPRINT_MISMATCH'
+  | 'PACKAGE_NAME_MISMATCH'
+export const PlayIntegrityErrorCode: S.Schema<PlayIntegrityErrorCode> = S.Literal(
+  'APP_INTEGRITY_FAILED' as const,
+  'DEVICE_INTEGRITY_FAILED' as const,
+  'LICENSE_CHECK_FAILED' as const,
+  'APK_FINGERPRINT_MISMATCH' as const,
+  'PACKAGE_NAME_MISMATCH' as const,
+)
 
 export const PlayIntegrityToken = S.Struct({
   appRecognitionVerdict: S.NullOr(AppRecognitionVerdict),
   deviceRecognitionVerdict: S.NullOr(S.Array(DeviceRecognitionVerdict)),
   appLicensingVerdict: S.NullOr(AppLicensingVerdict),
+  certificateSha256Digest: S.NullOr(S.Array(S.String)),
+  packageName: S.NullOr(S.String),
 })
 export type PlayIntegrityToken = S.Schema.Type<typeof PlayIntegrityToken>
-
-export const PlayIntegrityErrorCode = S.Literal(
-  'APP_INTEGRITY_FAILED',
-  'DEVICE_INTEGRITY_FAILED',
-  'LICENSE_CHECK_FAILED',
-)
-
-export type PlayIntegrityErrorCode = S.Schema.Type<typeof PlayIntegrityErrorCode>
 
 export class InvalidTokenError extends S.Class<InvalidTokenError>('InvalidTokenError')({
   codes: S.Array(PlayIntegrityErrorCode),
@@ -77,4 +88,4 @@ export class IntegrityErrorResponse extends S.Class<IntegrityErrorResponse>('Int
   errorCodes: S.Array(PlayIntegrityErrorCode),
 }) {}
 
-export { ConsumeChallengeError } from '@identity-backend/auth/types'
+export { ChallengeRejectedError } from '@identity-backend/auth/types'

@@ -5,7 +5,7 @@ import { Hono } from 'hono'
 import { testClient } from 'hono/testing'
 import { afterEach, describe, expect, vi } from 'vitest'
 import { AppAttestMiddlewareConfig, makeAppAttestMiddleware } from '../middleware.js'
-import { AppAttestError, ConsumeChallengeError } from '../types.js'
+import { AppAttestError, ChallengeRejectedError } from '../types.js'
 
 describe('AppleAttestMiddleware', () => {
   const isPackageNameValid = vi.fn<AppAttestMiddlewareConfig['Type']['isPackageNameValid']>()
@@ -95,7 +95,9 @@ describe('AppleAttestMiddleware', () => {
         const client = yield* makeClient
 
         yield* mockAllSuccess
-        yield* Effect.sync(() => consumeChallenge.mockImplementation(() => ConsumeChallengeError.make({})))
+        yield* Effect.sync(() =>
+          consumeChallenge.mockImplementation(() => ChallengeRejectedError.make({ reason: 'expired' }))
+        )
 
         const res = yield* Effect.tryPromise(() =>
           client.test.$post({ json: {} }, {

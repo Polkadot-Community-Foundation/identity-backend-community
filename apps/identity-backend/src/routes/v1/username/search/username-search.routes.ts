@@ -2,11 +2,16 @@ import { DB } from '#root/db/drizzle.js'
 import { SelectIndividualityUsernameWithDigitsSchema } from '#root/db/individuality.adapter.js'
 import { DefectReporter } from '#root/infrastructure/observability/mod.js'
 import { CursorPaginationService, paginateWithCursor } from '#root/lib/cursor-pagination/mod.js'
-import { createOpenAPIHono, ProblemDetailWithErrorsZod, problemResponse } from '#root/lib/problem-details.js'
+import {
+  createOpenAPIHono,
+  ProblemDetailWithErrorsZod,
+  ProblemDetailZod,
+  problemResponse,
+} from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
 import { cursorPaginationMiddlewareFactory } from '#root/middleware/cursor-pagination.middleware.js'
-import { bridgeSpanContext } from '#root/tracing/bridge-span-context.js'
 import { createRoute, z } from '@hono/zod-openapi'
+import { bridgeSpanContext } from '@identity-backend/observability'
 
 import { classifySearchPrefix } from '#root/routes/v1/username/username-prefix-match.js'
 import { searchUsernames } from '#root/routes/v1/username/username-prefix-match.store.js'
@@ -35,12 +40,20 @@ export type CursorData = S.Schema.Type<typeof CursorDataSchema>
 
 const searchUsernamesRoute = createRoute({
   summary: 'Search Usernames',
+  description:
+    'Unauthenticated callers must present a solved proof-of-compute in the `Proof-Of-Compute` header (base64 sessionId:timestamp:difficulty:counter:checksum) obtained from POST /api/v1/poc/issue; callers with a valid bearer token are exempt. Missing or invalid proof yields 402.',
   method: 'get',
   path: '/search',
   tags: ['v1'],
   security: [{ bearerAuth: [] }],
   request: {
     query: SearchUsernamesV1QuerySchema,
+    headers: z.object({
+      'Proof-Of-Compute': z.string().optional().openapi({
+        description:
+          'Base64 proof-of-compute token (sessionId:timestamp:difficulty:counter:checksum) from POST /api/v1/poc/issue, solved. Required for unauthenticated callers; bearer-authenticated callers are exempt.',
+      }),
+    }),
   },
   responses: {
     200: {
@@ -50,6 +63,11 @@ const searchUsernamesRoute = createRoute({
     400: {
       ...problemResponse(ProblemDetailWithErrorsZod),
       description: 'Bad Request - Invalid cursor, missing prefix, or prefix too long',
+    },
+    402: {
+      ...problemResponse(ProblemDetailZod),
+      description:
+        'Payment Required - proof-of-compute missing, expired, replayed, or below required difficulty (unauthenticated callers only)',
     },
     500: {
       content: { 'application/json': { schema: z.object({ error: z.string() }) } },

@@ -2,7 +2,7 @@ import { httpRequestDurationHistogram, httpRequestsTotalCounter } from '#root/me
 import { Clock, Duration, Effect, Exit, identity, Metric, MetricLabel, Runtime } from 'effect'
 import type * as hono from 'hono'
 
-const EXCLUDED_PATHS = new Set(['/healthcheck', '/livez', '/readyz', '/api/swagger/json'])
+const EXCLUDED_PATHS = new Set(['/healthcheck', '/livez', '/readyz', '/api/swagger/json', '/api/v1/version'])
 
 export namespace HttpMetricsMiddleware {
   export type Service = hono.MiddlewareHandler

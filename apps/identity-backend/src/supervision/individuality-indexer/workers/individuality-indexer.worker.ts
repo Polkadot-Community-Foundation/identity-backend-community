@@ -518,7 +518,7 @@ export const make = Effect.fn(function*(spec: IndividualityIndexerWorkSpec) {
 
     yield* Effect.gen(function*() {
       const finalizedHash = yield* legacyRpc.getFinalizedHead().pipe(
-        Effect.mapError((cause) => new IndexerTickFailure({ reason: 'rpc', cause: cause as unknown })),
+        Effect.mapError((cause) => new IndexerTickFailure({ reason: 'rpc', cause })),
       )
 
       yield* Effect.annotateCurrentSpan({

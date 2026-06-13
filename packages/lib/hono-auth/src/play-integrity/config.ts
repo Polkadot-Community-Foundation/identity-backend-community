@@ -4,26 +4,29 @@ import { Context, Effect, flow, Layer, Match, Schema as S } from 'effect'
 import { PlayIntegrityMiddlewareConfig } from './middleware.js'
 import { PlayIntegrityTokenAcl } from './play-integrity.acl.js'
 import { InvalidTokenError, PlayIntegrityMode } from './types.js'
-import { PlayIntegrityValidation, validatePlayIntegrityToken } from './validation.js'
+import { PlayIntegrityValidation, validatePlayIntegrityToken } from './validation.workflow.js'
 
 export class PlayIntegrityEnvironment extends Context.Tag('PlayIntegrityEnvironment')<PlayIntegrityEnvironment, {
   mode: PlayIntegrityMode
   androidPackageNames: ReadonlySet<string>
+  androidSigningDigests: ReadonlySet<string>
 }>() {}
 
 export const layerPlayIntegrityMiddlewareWithoutDependencies = Layer.effect(
   PlayIntegrityMiddlewareConfig,
   Effect.gen(function*() {
-    const { mode, androidPackageNames } = yield* PlayIntegrityEnvironment
+    const { mode, androidPackageNames, androidSigningDigests } = yield* PlayIntegrityEnvironment
     const { buildClientDataHash } = yield* AuthService
     const { consumeChallenge } = yield* ChallengeService
     const { decodeIntegrityToken } = yield* PlayIntegrityService
 
     const isTokenValid: PlayIntegrityMiddlewareConfig['Type']['isTokenValid'] = (foreignToken) => {
-      const result: PlayIntegrityValidation = validatePlayIntegrityToken(
+      const result: PlayIntegrityValidation = validatePlayIntegrityToken({
         mode,
-        S.decodeSync(PlayIntegrityTokenAcl)(foreignToken),
-      )
+        token: S.decodeSync(PlayIntegrityTokenAcl)(foreignToken),
+        expectedCertificateDigests: androidSigningDigests,
+        allowedPackageNames: androidPackageNames,
+      })
       return Match.value(result).pipe(
         Match.tag('PlayIntegrityRejected', (r) => Effect.fail(InvalidTokenError.make({ codes: r.codes }))),
         Match.orElse(() => Effect.succeed(undefined)),

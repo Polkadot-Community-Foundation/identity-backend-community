@@ -5,7 +5,7 @@
  */
 
 import { pop_testnet } from '@identity-backend/descriptors'
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { getPolkadotSigner, type PolkadotSigner } from '@polkadot-api/signer'
 import { sr25519CreateDerive } from '@polkadot-labs/hdkd'
 import { type KeyPair, mnemonicToMiniSecret, ss58Encode } from '@polkadot-labs/hdkd-helpers'
@@ -301,9 +301,7 @@ export async function registerLiteUsernameViaApi(
     header: {},
     json: formatParams(params),
   })
-  checkResponse(response, 202)
-
-  const data = await response.json()
+  const data = await (await checkResponseWithBody(response, 202)).json()
   return data.username
 }
 
@@ -437,13 +435,12 @@ export async function waitForSearchPrioritization(
   return vi.waitUntil(
     async () => {
       const response = await app.api.v1.usernames.search.$get({
+        header: {},
         query: { prefix: searchPrefix, limit: 10 },
       })
 
       if (response.status !== 200) return false
-      checkResponse(response, 200)
-
-      const data = await response.json()
+      const data = await (await checkResponseWithBody(response, 200)).json()
       const hasFullUsername = data.usernames.some((item: { username: string }) => item.username === fullUsername)
       const hasLiteUsername = data.usernames.some((item: { username: string }) => item.username === liteUsername)
 

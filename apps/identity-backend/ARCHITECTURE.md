@@ -1,114 +1,90 @@
-# Architecture Overview
-
-> **What this file is:** a descriptive map of the Identity Backend — its shape, components, data, and integrations — for rapid comprehension.
->
-> **What this file is NOT:** the rulebook. Every MUST / NEVER lives in [`AGENTS.md`](./AGENTS.md).
-
+---
+version: "2026-06-10"
 ---
 
-## The Single-Leader Split
+# apps/identity-backend — Architecture
 
-The defining architectural decision is that **exactly one process at a time submits transactions to the Polkadot People Chain**. All other processes serve HTTP only.
+> Progressive disclosure for agents. Start with `AGENTS.md` for the rulebook; come here for diagrams, data, and glossary when the rulebook points you to it.
 
-```
-┌────────────────────────────────────────────────────────────────────────┐
-│                    Deployment (N running processes)                    │
-│                                                                        │
-│  ┌─────────────────────┐          ┌─────────────────────────────┐    │
-│  │ Leader (1)          │          │ Followers (N-1)             │    │
-│  │ ─────────────────── │          │ ─────────────────────────── │    │
-│  │ holds PostgreSQL    │          │ try advisory lock → false   │    │
-│  │ session-scoped lock │          │ (lock held elsewhere)       │    │
-│  │                     │          │                             │    │
-│  │ runs daemon-leader  │          │ serve HTTP requests only    │    │
-│  │ ├─ ChainMetrics     │          │ ├─ /api/v1/*               │    │
-│  │ ├─ DimTicket        │          │ ├─ /webhooks               │    │
-│  │ ├─ Individuality    │          │ ├─ /admin                  │    │
-│  │ ├─ Invitation       │          │ └─ /healthcheck            │    │
-│  │ ├─ Notifications    │          │                             │    │
-│  │ ├─ LiteUsernameReg  │          │ enqueue to DB at most       │    │
-│  │ └─ RegistrationQueue│          │ (never call chain directly) │    │
-│  │                     │          │                             │    │
-│  │ submits chain txns  │          │ submit ZERO chain txns      │    │
-│  │ (nonce-protected)   │          │                             │    │
-│  └─────────────────────┘          └─────────────────────────────┘    │
-│                                                                        │
-│  Lock:   pg_try_advisory_lock(hashtext('identity-backend:daemon-leader'))
-│  Pool:   dedicated 2-connection pool with TCP keepalives              │
-│  Reaper: queries pg_locks every 60s to detect dead sessions           │
-│  Protocol: documented in src/leader-election/                         │
-└────────────────────────────────────────────────────────────────────────┘
-```
+## Single-leader concurrency
 
-**Why this matters:** The People Chain has no native nonce management for concurrent same-signer submission. Two processes submitting with the same account would race on the nonce. The advisory lock makes concurrent submission **structurally impossible** — followers never run the supervision tree that hosts chain-submitting code paths.
+Exactly one process runs `daemon-leader` at any instant. All others serve HTTP only and submit zero chain transactions. The lock is a PostgreSQL session-scoped advisory lock, key `identity-backend:daemon-leader`, `mode: 'required'`.
 
-**Chain-submitting code lives in these supervisors only:**
+```mermaid
+flowchart TB
+    subgraph Deployment["N running processes"]
+        direction TB
+        Leader["Leader (1)"]
+        Followers["Followers (N-1)"]
+    end
 
-```
-daemon-leader (holds the required lock)
-├── ChainMetricsSupervisor
-├── DimTicketSupervisor
-├── IndividualityIndexerSupervisor
-├── InvitationTicketSupervisor
-├── NotificationsProcessorSupervisor
-├── LiteUsernameRegistrationSupervisor
-└── RegistrationQueueSupervisor
+    subgraph LeaderWork["Leader holds advisory lock"]
+        direction TB
+        DL[daemon-leader]
+        DL --> ChainMetrics
+        DL --> DimTicket
+        DL --> IndividualityIndexer
+        DL --> InvitationTicket
+        DL --> NotificationsProcessor
+        DL --> LiteUsernameReg
+        DL --> RegistrationQueue
+    end
+
+    subgraph FollowerWork["Followers: lock busy"]
+        direction TB
+        API[/api/v1/*]
+        WH[/webhooks]
+        AD[/admin]
+        HC[/healthcheck]
+    end
+
+    Leader --> LeaderWork
+    Followers --> FollowerWork
+    DB[(PostgreSQL)] -->|pg_try_advisory_lock| Leader
 ```
 
-All children use `lock: { mode: 'none' }` — only `daemon-leader` acquires the lock.
+Lock service, pool, and reaper all live in `src/leader-election/`. Composition root is `src/runtime.ts` — `layerDaemonLeaderSupervisor` is the only entry point.
 
----
+Child supervisors (all `lock: { mode: 'none' }`):
 
-## Domain Model
+```bash
+grep -rn "extends Effect.Service<.*Supervisor>\|extends Context.Tag<.*Supervisor>" apps/identity-backend/src/supervision/ | grep -v DaemonLeader
+```
 
-### DMMF pipeline
+See `src/leader-election/AGENTS.md` for the lock key, reaper query, and `pg_locks` negative-`hashtext` trap.
+
+## Domain model
 
 Every feature follows read (impure) → decode to branded domain types → decide in a pure `*.workflow` returning `Either<Decision, Error>` → shape outputs → write (impure).
 
 - Decisions stay pure. I/O stays a thin shell. Dependencies point inward.
 - Decode foreign shapes at the boundary; never cast.
-- Target suffixes: `*.schema`, `*.workflow`, `*.acl`, `*.store`, `*.executor`. Legacy `.core.ts` / `.shell.ts` / `core/`+`shell/` folders are mid-migration.
+- Target suffixes: `*.schema`, `*.workflow`, `*.acl`, `*.store`, `*.executor`, `*.policy`.
 
-### Edge
+**Edge:** Hono + single global `app.onError` + `ProblemDetail`. A route decodes the request, calls a workflow/executor, and returns. The decision lives in a pure `*.workflow.ts`.
 
-**Hono + single global `app.onError` + `ProblemDetail`** is the sanctioned edge. DMMF governs the domain core _behind_ the route. A route decodes the request, calls a workflow/executor, and returns. The decision lives in a pure `*.workflow.ts`.
+## Request flow
 
----
+```mermaid
+sequenceDiagram
+    participant App as Polkadot App
+    participant IB as Identity Backend
+    participant PG as PostgreSQL
+    participant PC as Polkadot People Chain
+    participant PP as Push Providers
 
-## 1. Request Flow
-
-```
-┌─────────────┐     HTTP     ┌─────────────────┐
-│ Polkadot App │◄───────────►│ Identity Backend │
-│(iOS/Android) │             │  (N processes)   │
-└─────────────┘             └─────────────────┘
-                                    │
-              ┌─────────────────────┼─────────────────────┐
-              │                     │                     │
-              ▼                     ▼                     ▼
-      ┌──────────────┐    ┌──────────────┐    ┌──────────────┐
-      │  PostgreSQL  │    │Polkadot People│   │ Push Providers│
-      │(shared state)│    │ Chain (WS)    │   │ (APNs/FCM)   │
-      └──────────────┘    └──────────────┘    └──────────────┘
+    App->>IB: HTTP /api/v1/*
+    IB->>IB: Middleware (auth, validation)
+    IB->>IB: Handler → Workflow/Executor
+    IB->>PG: Persist
+    IB->>PC: Chain RPC (leader only)
+    IB->>PP: Push (APNs / FCM)
+    IB-->>App: Response
 ```
 
-**HTTP path:**
+**Background path (leader only):** `daemon-leader` acquires the advisory lock → forks child supervisors → workers poll/stream conditions, process batches, persist results.
 
-1. Hono router → Middleware (auth, validation)
-2. Route handler → Decodes request → Calls use case/workflow
-3. Use case → Pure business logic → Returns `Either<Decision, Error>`
-4. Effect Layer → Persists to PostgreSQL or calls external APIs
-5. Response → Problem Details (4xx) or success payload
-
-**Background path (leader only):**
-
-1. `daemon-leader` acquires advisory lock → forks child supervisors
-2. Workers poll/stream: check conditions → process batch → persist results
-3. DefectReporter captures failures → Sentry / OpenTelemetry
-
----
-
-## 2. Project Structure
+## Project structure
 
 ```
 apps/identity-backend/
@@ -117,190 +93,104 @@ apps/identity-backend/
 │   ├── main.ts                   # Entry point (BunRuntime)
 │   ├── runtime.ts                # Effect layer composition root
 │   ├── config.ts                 # Environment configuration
-│   ├── constants.ts              # Application constants
 │   ├── runtime/                  # Logger, Rx, OTEL dispatch
 │   ├── data/                     # Cross-cutting errors
 │   ├── db/                       # DB connection and schema
 │   ├── features/                 # Domain features (DMMF target)
-│   │   ├── dim/
-│   │   ├── individuality/
-│   │   ├── subscriptions/
-│   │   └── username-registration/
-│   ├── infrastructure/
-│   │   ├── adapters/             # Blockchain RPC
-│   │   ├── observability/        # Sentry
-│   │   └── telemetry/            # Metrics and tracing
+│   ├── infrastructure/           # Blockchain RPC, Sentry, telemetry
 │   ├── jwt/                      # Token issuance and rotation
-│   ├── leader-election/          # Advisory lock (see above)
+│   ├── leader-election/          # Advisory lock
 │   ├── lib/                      # Problem details, SS58, probes
 │   ├── metrics/                  # Metrics definitions
 │   ├── middleware/               # HTTP middleware
 │   ├── routes/                   # HTTP route handlers
 │   ├── schema/                   # Shared Zod schemas
 │   ├── supervision/              # Background daemon supervisors
-│   ├── tracing/                  # OTEL span context bridging
 │   ├── types/                    # Shared TypeScript types
-│   ├── username-registration/    # Queue + store (legacy, migrating)
-│   ├── utils/                    # Helpers (IP, streams, token math)
 │   └── webrtc/                   # TURN credential issuance
 ├── tests/                        # Integration and E2E tests
 ├── drizzle/                      # Database migrations
 └── otel.ts                       # Test OTEL setup
 ```
 
-> **Username registration spans three locations mid-migration:** domain logic in `features/username-registration/`, queue + store in top-level `username-registration/`, and daemon workers in `supervision/registration-queue/`. New work follows the DMMF suffix convention (see `AGENTS.md`).
+## Core components
 
----
+**Stack:** Bun · Hono + `@hono/zod-openapi` · Effect-TS · Vitest + `@effect/vitest` · OpenTelemetry OTLP + Sentry
 
-## 3. Core Components
+routes[5]{prefix,purpose}:
+/api/v1/*,public api
+/webhooks,external webhooks
+/admin,admin operations
+/healthcheck /livez /readyz,health probes
+/api/swagger/json,openapi 3.1 spec
 
-**Stack:** Bun · Hono + `@hono/zod-openapi` · Effect-TS (`Effect.gen`, `Layer`) · Vitest + `@effect/vitest` · OpenTelemetry OTLP + Sentry
+authentication[2]{layer,owner}:
+platform attestation,authPlugin middleware
+sr25519 client proof,route handler
 
-### 3.1 HTTP Transport
+## Data stores
 
-Receives HTTP requests, validates input, authenticates devices, dispatches to domain logic.
+tables[14]{name,purpose}:
+individuality_usernames,username registrations and status
+challenges,single-use attestation challenges
+apple_attestations,ios attestation records
+dim_tickets,dim ticket lifecycle
+invitation_tickets,pre-generated invitation keypairs
+push_subscription,device push tokens
+subscription_rule,matching rules for push notifications
+push_record,delivery records
+failed_push_record,failed delivery records
+rate_limit,per-sender rate limiting
+android_device_identifiers,android device ids
+refresh_tokens,jwt refresh tokens
+registration_queue_entries,username registration queue (table retained; queue router intentionally unmounted — see `src/routes/AGENTS.md`)
+leader_election,advisory lock observability
 
-| Route prefix                        | Purpose                         |
-| ----------------------------------- | ------------------------------- |
-| `/api/v1/*`                         | Public API (OpenAPI-documented) |
-| `/webhooks`                         | External webhooks               |
-| `/admin`                            | Admin operations (basic auth)   |
-| `/healthcheck`, `/livez`, `/readyz` | Health probes                   |
+PostgreSQL is the only state shared between processes.
 
-### 3.2 Authentication
+## External integrations
 
-**Two-layer verification:**
+integrations[5]{name,purpose,technology}:
+polkadot people chain,on-chain username registration and dim tickets,websocket rpc via substrate-client
+asset hub,secondary chain interactions,websocket rpc
+apple app attest / devicecheck / apns,ios attestation and push,apple sdks
+google play integrity / fcm,android attestation and push,google sdks
+web push protocol,browser push notifications,vapid keypair
 
-- **Layer 1 — Platform Attestation:** Play Integrity (Android) or App Attest (iOS)
-- **Layer 2 — Client Proof:** SR25519 signature over challenge + clientId
+## Deployment
 
-**Token management:** JWT access tokens (short-lived), opaque refresh tokens with single-use rotation.
+Multi-instance, shared-nothing. Multiple processes serve HTTP. A single `daemon-leader` holds the advisory lock for background work. In-memory state is process-local and ephemeral.
 
-`authPlugin` middleware owns Layer 1; route handlers own Layer 2.
+## Security
 
-### 3.3 Username Management
+- Platform attestation + SR25519 client proof + JWT with refresh rotation
+- Route-level JWT verification, device-specific token binding
+- `Redacted<string>` for secrets, TLS for external communication
 
-Reserves and registers usernames (`{base}.{digits}`) on the Polkadot People chain.
+## Glossary
 
-**Two-phase flow:**
+terms[13]{term,definition}:
+username,personhood proof formatted as {base}.{digits}
+attestation,cryptographic proof submitted to chain
+registration state,RESERVED → ASSIGNED | FAILED
+invitation ticket,dim ticket granting the right to register
+indexer,daemon syncing on-chain state to local db
+bff,backend-for-frontend
+dim,dual identity mechanism (game or proofofink)
+dmmf,domain modelling made functional
+people chain,polkadot parachain for identity
+asset hub,polkadot parachain for assets
+sr25519,schnorr signature scheme
+apns,apple push notification service
+fcm,firebase cloud messaging
 
-1. Check availability against local index
-2. Reserve in database (`RESERVED` status)
-3. Background daemon submits registration to chain
-4. Indexer syncs on-chain state back (`ASSIGNED` or `FAILED`)
+## Progressive-disclosure pointers
 
-**Key areas:** `features/username-registration/` (logic), `supervision/registration-queue/` (workers), `supervision/individuality-indexer/` (sync)
-
-### 3.4 DIM Ticket System
-
-Manages Dual Identity Mechanism credentials (Game or ProofOfInk) on the People chain.
-
-**Lifecycle:** `PENDING` → `SUBMITTING` → `SUBMITTED` → `REGISTERED` | `FAILED`
-
-**Key areas:** `features/dim/` (workflows), `supervision/invitation-ticket/` (daemon)
-
-### 3.5 Push Notifications
-
-Delivers push notifications based on on-chain statement subscriptions.
-
-- **Subscription CRUD:** devices register tokens and define rules
-- **Statement Processor:** subscribes to on-chain statements, matches against rules
-- **Delivery Pipeline:** rate-limited, deduplicated delivery
-- **Broadcast:** direct broadcast API
-
-**Key areas:** `features/subscriptions/` (logic), `supervision/notifications-processor/` (daemon)
-
----
-
-## 4. Data Stores
-
-### PostgreSQL
-
-Primary persistent store — the _only_ state shared between processes.
-
-| Table                        | Purpose                               |
-| ---------------------------- | ------------------------------------- |
-| `individuality_usernames`    | Username registrations and status     |
-| `challenges`                 | Single-use attestation challenges     |
-| `apple_attestations`         | iOS attestation records               |
-| `dim_tickets`                | DIM ticket lifecycle                  |
-| `invitation_tickets`         | Pre-generated invitation keypairs     |
-| `push_subscription`          | Device push tokens                    |
-| `subscription_rule`          | Matching rules for push notifications |
-| `push_record`                | Delivery records                      |
-| `failed_push_record`         | Failed delivery records               |
-| `rate_limit`                 | Per-sender rate limiting              |
-| `android_device_identifiers` | Android device IDs                    |
-| `refresh_tokens`             | JWT refresh tokens                    |
-| `registration_queue_entries` | Username registration queue           |
-| `leader_election`            | Advisory lock observability           |
-
----
-
-## 5. External Integrations
-
-| Integration                           | Purpose                                        | Technology                                         |
-| ------------------------------------- | ---------------------------------------------- | -------------------------------------------------- |
-| Polkadot People Chain                 | On-chain username registration and DIM tickets | WebSocket RPC via `@polkadot-api/substrate-client` |
-| Asset Hub                             | Secondary chain interactions                   | WebSocket RPC                                      |
-| Apple App Attest / DeviceCheck / APNs | iOS attestation and push                       | Apple SDKs                                         |
-| Google Play Integrity / FCM           | Android attestation and push                   | Google SDKs                                        |
-| Web Push Protocol                     | Browser push notifications                     | VAPID keypair                                      |
-
----
-
-## 6. Deployment
-
-**Architecture:** multi-instance, shared-nothing.
-
-- Multiple processes serve HTTP traffic concurrently.
-- A single `daemon-leader` holds the advisory lock for background work.
-- The only shared state is PostgreSQL.
-- In-memory state is process-local and ephemeral.
-
-**Health probes:** `/healthcheck` (full, includes DB), `/livez` (liveness), `/readyz` (readiness, includes DB).
-
----
-
-## 7. Security
-
-- **Authentication:** platform attestation, SR25519 client proof, JWT with refresh rotation
-- **Authorization:** route-level JWT verification, device-specific token binding
-- **Data protection:** `Redacted<string>` for secrets, TLS for all external communication
-
----
-
-## 8. Development Environment
-
-```bash
-corepack enable
-corepack pnpm i
-pnpm build
-pnpm --filter identity-backend-container dev
-```
-
-**Test layers:** unit/property (Vitest + `@effect/vitest`), integration (boundary doubles), E2E (separate app package).
-
-**Definition of done:** see `AGENTS.md`.
-
----
-
-## 9. Glossary
-
-| Term               | Definition                                      |
-| ------------------ | ----------------------------------------------- |
-| Username           | Personhood proof formatted as `{base}.{digits}` |
-| Attestation        | Cryptographic proof submitted to chain          |
-| Registration state | `RESERVED` → `ASSIGNED` → `FAILED`              |
-| Invitation ticket  | DIM ticket granting the right to register       |
-| Indexer            | Daemon syncing on-chain state to local DB       |
-| BFF                | Backend-for-Frontend                            |
-| DIM                | Dual Identity Mechanism (Game or ProofOfInk)    |
-| DMMF               | Domain Modelling Made Functional                |
-| People Chain       | Polkadot parachain for identity                 |
-| Asset Hub          | Polkadot parachain for assets                   |
-| SR25519            | Schnorr signature scheme                        |
-| APNs               | Apple Push Notification service                 |
-| FCM                | Firebase Cloud Messaging                        |
-| VAPID              | Voluntary Application Server Identification     |
-| OTEL               | OpenTelemetry                                   |
+| If you are editing...        | Read this file's...                         | Read also...                                                     |
+| ---------------------------- | ------------------------------------------- | ---------------------------------------------------------------- |
+| Route handlers               | § Core components (routes/auth)             | `src/routes/AGENTS.md`                                           |
+| Middleware (auth, JWT, etc.) | § Core components (routes/auth)             | `src/middleware/AGENTS.md`                                       |
+| Leader-election code         | § Single-leader concurrency                 | `src/leader-election/AGENTS.md`                                  |
+| Daemons / supervisors        | § Single-leader concurrency, § Request flow | `src/supervision/AGENTS.md`                                      |
+| DIM / invitation tickets     | § Domain model, § Data stores               | `src/features/dim/AGENTS.md`, `src/features/dim/ARCHITECTURE.md` |
+| OTel / Sentry                | § Core components                           | `src/runtime/otel/AGENTS.md`                                     |

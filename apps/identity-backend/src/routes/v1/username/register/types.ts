@@ -120,6 +120,15 @@ export const RegisterUsernamesV1Response = z.object({
       description: 'The full username (base_username.digits).',
       examples: ['alice.23'],
     }),
+  device_check_available: z.boolean()
+    .optional()
+    .openapi({
+      description:
+        'Advisory iOS DeviceCheck outcome surfaced in soft mode (ENFORCE_AUTH=false) and on the hard-mode success ' +
+        'path. true: the device was available; false: the device was already registered (soft mode only — hard mode ' +
+        'blocks with PAYMENT_REQUIRED). Omitted when no device token was supplied or the check could not run.',
+      examples: [true],
+    }),
 }).openapi({
   title: 'RegisterUsernamesV1Response',
 })

@@ -6,7 +6,7 @@
     "moduleResolution": "bundler",
     "noEmit": true,
     "customConditions": ["@identity-backend/source"],
-    "types": ["node"]
+    "types": ["node", "bun"]
   },
   "include": ["src", "ts-setup"],
   "exclude": ["dist"]

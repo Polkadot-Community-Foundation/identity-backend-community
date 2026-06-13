@@ -35,6 +35,12 @@ export const VALID_PACKAGE_NAMES = [
 
 export const VALID_INTEGRITY_TOKENS = ['validToken1', 'validToken2', 'validToken3']
 
+/**
+ * HS256 secret the backend verifies bearer tokens against.
+ * WARNING: This is a dev-only test secret - NEVER use in production!
+ */
+export const JWT_AUTH_SECRET = 'my-very-strong-random-jwt-secret'
+
 export const integreSQL = new IntegreSQLClient({
   url: `http://localhost:${process.env.E2E_INTEGRESQL_HOST_PORT ?? '5000'}`,
 })
@@ -51,10 +57,19 @@ export type SetupTestEnvironmentOptions = {
   PROXY_DELEGATION_ENABLED?: string
   INVITATION_TICKET_DAEMON_ENABLED?: string
   ADMIN_ROUTE_ENABLED?: string
+  DEBUG_VOUCHER_ENABLED?: string
   DOTNS_GATEWAY_ENABLED?: string
   DOTNS_INTAKE_FRESHNESS_MAX_AGE_SECONDS?: string
   DOTNS_SIGNED_AT_SAFETY_MARGIN_SECONDS?: string
   ASSET_HUB_RPC_ENDPOINTS?: string
+  POC_ENABLED?: string
+  POC_DIFFICULTY_BITS?: string
+  EXPOSE_BUILD_INFO?: string
+  APP_SERVICE?: string
+  APP_VERSION?: string
+  GIT_COMMIT?: string
+  BUILD_TIME?: string
+  DEPLOYMENT_ENVIRONMENT?: string
 }
 
 export interface TestEnvironmentOptions {
@@ -170,7 +185,16 @@ export async function setupTestEnvironment<T extends Hono<any, any, any>>(option
       USERNAME_INDEXER_SYNC_INTERVAL_MS: options.USERNAME_INDEXER_SYNC_INTERVAL_MS ?? '300000',
       PUSH_SUBSCRIPTIONS_INDEXER_ENABLED: 'false',
       INVITATION_TICKET_DAEMON_ENABLED: options.INVITATION_TICKET_DAEMON_ENABLED ?? 'false',
+      POC_ENABLED: options.POC_ENABLED ?? 'false',
+      POC_DIFFICULTY_BITS: options.POC_DIFFICULTY_BITS ?? '4',
       ADMIN_ROUTE_ENABLED: options.ADMIN_ROUTE_ENABLED ?? 'false',
+      DEBUG_VOUCHER_ENABLED: options.DEBUG_VOUCHER_ENABLED ?? 'false',
+      EXPOSE_BUILD_INFO: options.EXPOSE_BUILD_INFO ?? 'false',
+      APP_SERVICE: options.APP_SERVICE ?? '',
+      APP_VERSION: options.APP_VERSION ?? '',
+      GIT_COMMIT: options.GIT_COMMIT ?? '',
+      BUILD_TIME: options.BUILD_TIME ?? '',
+      DEPLOYMENT_ENVIRONMENT: options.DEPLOYMENT_ENVIRONMENT ?? '',
       PROXY_DELEGATION_ENABLED: options.PROXY_DELEGATION_ENABLED ?? 'false',
       ATTESTER_PROXY_PRIVATE_KEY: options.PROXY_DELEGATION_ENABLED === 'true' ? ATTESTER_PROXY_PRIVATE_KEY : '',
       OTEL_SERVICE_NAME: 'identity-backend-web',

@@ -1,4 +1,4 @@
-import { checkResponse } from '@identity-backend/testing/hono'
+import { checkResponseWithBody } from '@identity-backend/testing/hono'
 import { hc } from 'hono/client'
 import type { App } from 'identity-backend-container/v1'
 import { execSync } from 'node:child_process'
@@ -17,8 +17,8 @@ const SAMPLE_EVERY = Number(process.env.E2E_MEMORY_PROBE_SAMPLE_EVERY ?? 50)
 const CONCURRENCY = Number(process.env.E2E_MEMORY_PROBE_CONCURRENCY ?? 10)
 const HEAPDUMP_ENABLED = process.env.E2E_HEAPDUMP_ENABLED === 'true'
 const HEAPDUMP_DIR = process.env.E2E_HEAPSNAPSHOTS_DIR ?? '.heapsnapshots'
-const HEAPDUMP_USERNAME = process.env.SWAGGER_USERNAME ?? 'swagger'
-const HEAPDUMP_PASSWORD = process.env.SWAGGER_PASSWORD ?? 'swagger'
+const HEAPDUMP_USERNAME = process.env.DEBUG_USERNAME ?? 'debug'
+const HEAPDUMP_PASSWORD = process.env.DEBUG_PASSWORD ?? 'debug'
 
 interface Sample {
   readonly t: number
@@ -176,8 +176,7 @@ describe.skipIf(!PROBE_ENABLED)('E2E: Memory probe under request load', () => {
           query: {},
           json: { usernames },
         })
-        checkResponse(r1, 200)
-        await r1.json()
+        await (await checkResponseWithBody(r1, 200)).json()
       })
       await Promise.all(batch)
       completed += CONCURRENCY

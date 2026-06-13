@@ -2,8 +2,7 @@ import { DefectReporter } from '#root/infrastructure/observability/mod.js'
 import * as PG from '#root/lib/pg-utils.js'
 import { createOpenAPIHono } from '#root/lib/problem-details.js'
 import { HttpMetricsMiddleware, Logger as HonoLoggingMiddleware } from '#root/middleware/mod.js'
-import { Cause, Clock, Config, Context, Effect, Exit, Layer, Match, pipe, Redacted, Runtime, Schedule } from 'effect'
-import { basicAuth } from 'hono/basic-auth'
+import { Cause, Clock, Config, Context, Effect, Exit, Layer, Match, pipe, Runtime, Schedule } from 'effect'
 import { getConnInfo, serveStatic } from 'hono/bun'
 import { HTTPException } from 'hono/http-exception'
 import { requestId } from 'hono/request-id'
@@ -17,19 +16,19 @@ import { decideErrorReport } from '#root/lib/request-error.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
 import { withSpanContext } from '@effect/opentelemetry/Tracer'
 export { isProbePath, PROBE_PATHS } from '#root/lib/kube.js'
-import { parseTraceparent } from '#root/tracing/traceparent.js'
+import { makeBuildInfoRoute } from '#root/routes/build-info.route.js'
+import { parseTraceparent } from '@identity-backend/observability'
 import { makeAdminRoute } from './routes/admin.routes.js'
 import { makeDebugHeapdumpRoute } from './routes/debug-heapdump.routes.js'
 import { makeDebugMemoryRoute } from './routes/debug-memory.routes.js'
 import { makeDebugQueryRoute } from './routes/debug-query.routes.js'
+import { makeDebugVoucherSecretRoute } from './routes/debug-voucher-secret.routes.js'
 import * as v1 from './routes/v1/mod.js'
 
 const { version } = packageJson
 
 export class AppConfig extends Context.Tag('@app/AppConfig')<AppConfig, {
   port: number
-  swaggerUsername: string
-  swaggerPassword: Redacted.Redacted<string>
 }>() {}
 
 export const layerAppWithoutDependencies = Effect.gen(function*() {
@@ -83,10 +82,6 @@ export const layerAppWithoutDependencies = Effect.gen(function*() {
 
     app.get(
       '/api/swagger/json',
-      basicAuth({
-        username: config.swaggerUsername,
-        password: Redacted.value(config.swaggerPassword),
-      }),
       (c) => {
         app.openAPIRegistry.registerComponent('securitySchemes', 'bearerAuth', {
           type: 'http',
@@ -199,11 +194,15 @@ export const layerAppWithoutDependencies = Effect.gen(function*() {
   const debugHeapdumpRoute = yield* makeDebugHeapdumpRoute
   const debugMemoryRoute = yield* makeDebugMemoryRoute
   const debugQueryRoute = yield* makeDebugQueryRoute
+  const debugVoucherSecretRoute = yield* makeDebugVoucherSecretRoute
+  const buildInfoRoute = yield* makeBuildInfoRoute
 
   app.route('/admin', adminRoute)
   app.route('/debug/heapdump', debugHeapdumpRoute)
   app.route('/debug/memory', debugMemoryRoute)
   app.route('/debug/query', debugQueryRoute)
+  app.route('/debug/voucher', debugVoucherSecretRoute)
+  app.route('/', buildInfoRoute)
 
   yield* v1.makeRoutes(app)
 
@@ -243,12 +242,10 @@ export const layerApp = layerAppWithoutDependencies.pipe(
     Layer.effect(
       AppConfig,
       Effect.gen(function*() {
-        const { PORT, SWAGGER_USERNAME, SWAGGER_PASSWORD } = yield* Effect.promise(() => import('#root/config.js'))
+        const { PORT } = yield* Effect.promise(() => import('#root/config.js'))
 
         return ((yield* Config.all({
           port: PORT,
-          swaggerUsername: SWAGGER_USERNAME,
-          swaggerPassword: SWAGGER_PASSWORD,
         })) satisfies AppConfig['Type'])
       }),
     ),

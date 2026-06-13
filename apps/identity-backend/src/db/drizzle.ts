@@ -1,7 +1,9 @@
 import { DB } from '@identity-backend/db'
 import { relations } from '@identity-backend/db/Relations'
-import { Config, Context, Duration, Effect, Layer, pipe, Redacted } from 'effect'
+import { Config, Context, Duration, Effect, Layer, Metric, pipe, Redacted } from 'effect'
 import net from 'node:net'
+
+import { poolConnectionsClosedTotal, poolConnectionsOpenedTotal } from '#root/supervision/pg-monitor/metrics.js'
 
 import * as schema from './schema.js'
 
@@ -26,6 +28,13 @@ export class WebDbPoolConfig extends Context.Reference<WebDbPoolConfig>()(
   },
 ) {}
 
+const recordSocketMetric = (metric: Metric.Metric.Counter<number>): void => {
+  try {
+    Effect.runSync(Metric.increment(metric))
+  } catch {
+  }
+}
+
 export const makeSocketFactory = (timeoutMs: number) => async (opts: { host: string[]; port: number[] }) => {
   const [host] = opts.host
   const [port] = opts.port
@@ -35,10 +44,18 @@ export const makeSocketFactory = (timeoutMs: number) => async (opts: { host: str
 
   const { promise, resolve, reject } = Promise.withResolvers<net.Socket>()
   const socket = new net.Socket()
+  let didOpen = false
   socket.setTimeout(timeoutMs)
   socket.on('timeout', () => socket.destroy())
   socket.on('error', reject)
+  socket.on('close', () => {
+    if (didOpen) {
+      recordSocketMetric(poolConnectionsClosedTotal)
+    }
+  })
   socket.connect(port, host, () => {
+    didOpen = true
+    recordSocketMetric(poolConnectionsOpenedTotal)
     socket.off('error', reject)
     resolve(socket)
   })

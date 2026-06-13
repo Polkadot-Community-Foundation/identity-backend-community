@@ -30,4 +30,6 @@ export const ppnContainerStartupTimeoutMillis = 420_000
 
 export const grantAllowanceRpcTimeout = Duration.seconds(15)
 
+export const grantAllowanceInclusionTimeout = Duration.seconds(30)
+
 export const grantAllowanceTxFinalizationTimeout = Duration.seconds(120)

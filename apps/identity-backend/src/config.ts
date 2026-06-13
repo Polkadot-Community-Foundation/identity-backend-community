@@ -2,6 +2,7 @@ import { BatchSize } from '#root/batch-backoff/batch-backoff.schema.js'
 import { BlockTimeout } from '#root/infrastructure/telemetry/daemons/block-finalization.daemon.js'
 import { HexString } from '#root/schema/mod.js'
 import { Realm } from '#root/webrtc/webrtc.schema.js'
+import { GOOGLE_ROOT_CERTS } from '@identity-backend/android-attest'
 import { sr25519 } from '@identity-backend/crypto'
 import { JWTInput } from '@identity-backend/play-integrity'
 import { Config, ConfigError, Duration, Either, flow, HashSet, pipe, Redacted, Schema as S } from 'effect'
@@ -95,11 +96,21 @@ export const ROUTE_TIMEOUT = pipe(
   Config.withDescription('Route handler timeout before returning 504'),
 )
 
-export const SET_USERNAME_FOR_TIMEOUT = pipe(
-  Config.duration('SET_USERNAME_FOR_TIMEOUT'),
-  Config.withDefault(Duration.seconds(12)),
+export const TX_INCLUSION_TIMEOUT_DEFAULT = Duration.seconds(5)
+
+export const TX_INCLUSION_TIMEOUT = pipe(
+  Config.duration('TX_INCLUSION_TIMEOUT'),
+  Config.withDefault(TX_INCLUSION_TIMEOUT_DEFAULT),
   Config.withDescription(
-    'Maximum time to wait for the first transaction event when registering a username on-chain',
+    'Maximum time from broadcast to best-block inclusion when registering a username on-chain before failing with TxInclusionTimeoutError',
+  ),
+)
+
+export const PEOPLE_CHAIN_FINALIZATION_TIMEOUT = pipe(
+  Config.duration('PEOPLE_CHAIN_FINALIZATION_TIMEOUT'),
+  Config.withDefault(Duration.seconds(70)),
+  Config.withDescription(
+    'Maximum time from best-block inclusion to finalization when registering a username on the People Chain before failing with TxFinalizationError',
   ),
 )
 
@@ -137,11 +148,19 @@ export const DOTNS_RESERVE_BATCH_SIZE = pipe(
   ),
 )
 
-export const DOTNS_RESERVE_SUBMIT_TIMEOUT = pipe(
-  Config.duration('DOTNS_RESERVE_SUBMIT_TIMEOUT'),
-  Config.withDefault(Duration.seconds(12)),
+export const DOTNS_RESERVE_INCLUSION_TIMEOUT = pipe(
+  Config.duration('DOTNS_RESERVE_INCLUSION_TIMEOUT'),
+  Config.withDefault(TX_INCLUSION_TIMEOUT_DEFAULT),
   Config.withDescription(
-    'Maximum time to wait for the first transaction event when submitting a dotNS reservation',
+    'Maximum time from broadcast to best-block inclusion when submitting a dotNS reservation before failing with TxInclusionTimeoutError',
+  ),
+)
+
+export const ASSET_HUB_FINALIZATION_TIMEOUT = pipe(
+  Config.duration('ASSET_HUB_FINALIZATION_TIMEOUT'),
+  Config.withDefault(Duration.seconds(70)),
+  Config.withDescription(
+    'Maximum time from best-block inclusion to finalization when submitting a dotNS reservation on Asset Hub before failing with TxFinalizationError',
   ),
 )
 
@@ -188,6 +207,13 @@ export const DEBUG_SQL_ENABLED = Config.boolean('DEBUG_SQL_ENABLED').pipe(
   Config.withDefault(false),
   Config.withDescription(
     'Feature flag to enable the /debug/query route which proxies read-only SQL queries for diagnostics.',
+  ),
+)
+
+export const DEBUG_VOUCHER_ENABLED = Config.boolean('DEBUG_VOUCHER_ENABLED').pipe(
+  Config.withDefault(false),
+  Config.withDescription(
+    'Feature flag to enable the /debug/voucher route which mints and registers a single-use voucher secret for testing. NEVER enable in production.',
   ),
 )
 
@@ -269,6 +295,33 @@ export const PROXY_DELEGATION_ENABLED = Config.boolean('PROXY_DELEGATION_ENABLED
   Config.withDescription(
     'Feature flag to enable proxy account delegation for PeopleLite.attest calls via Proxy.proxy instead of Utility.force_batch',
   ),
+)
+
+export const EXPOSE_BUILD_INFO = Config.boolean('EXPOSE_BUILD_INFO').pipe(
+  Config.withDefault(false),
+  Config.withDescription(
+    'Feature flag to register the GET /api/v1/version endpoint that returns the deployed build identity. Default off; flip on per environment for on-call triage, release verification, and client-side error reports.',
+  ),
+)
+
+export const APP_SERVICE = Config.string('APP_SERVICE').pipe(
+  Config.withDefault(''),
+  Config.withDescription('Service name for the GET /api/v1/version endpoint. Baked at image build time.'),
+)
+
+export const APP_VERSION = Config.string('APP_VERSION').pipe(
+  Config.withDefault(''),
+  Config.withDescription('Semver for the GET /api/v1/version endpoint. Baked at image build time.'),
+)
+
+export const GIT_COMMIT = Config.string('GIT_COMMIT').pipe(
+  Config.withDefault(''),
+  Config.withDescription('Git commit SHA for the GET /api/v1/version endpoint. Baked at image build time.'),
+)
+
+export const BUILD_TIME = Config.string('BUILD_TIME').pipe(
+  Config.withDefault(''),
+  Config.withDescription('RFC 3339 build timestamp for the GET /api/v1/version endpoint. Baked at image build time.'),
 )
 
 export const USERNAME_INDEXER_SYNC_INTERVAL_MS = pipe(
@@ -354,7 +407,7 @@ export const DEVICE_CHECK_IOS_ENABLED = pipe(
   Config.boolean('DEVICE_CHECK_IOS_ENABLED'),
   Config.withDefault(false),
   Config.withDescription(
-    'Enable Apple DeviceCheck for iOS username registration. When false, the DC middleware and route-side register call become no-ops and DEVICE_CHECK_* env vars are not required at startup.',
+    'Enable Apple DeviceCheck for iOS username registration. When false, the DC middleware and route-side register call become no-ops and DEVICE_CHECK_* env vars are not required at startup. When true, the middleware queries Apple; ENFORCE_AUTH then selects soft (advisory) vs hard (blocking) enforcement.',
   ),
 )
 
@@ -421,6 +474,15 @@ export const ANDROID_SIGNING_DIGEST_WEBSITE = pipe(
   Config.withDescription('SHA-256 fingerprint of the website/vanilla APK signing certificate.'),
 )
 
+export const ANDROID_ATTESTATION_ROOT_PEMS = pipe(
+  Config.array(Config.nonEmptyString(), 'ANDROID_ATTESTATION_ROOT_PEMS'),
+  Config.withDefault(GOOGLE_ROOT_CERTS),
+  Config.withDescription(
+    'PEM-encoded trust anchors for Android key-attestation certificate chains. Defaults to the Google ' +
+      'hardware attestation roots; override only to validate chains issued by a test certificate authority.',
+  ),
+)
+
 export const ANDROID_ATTESTATION_TOKEN_TTL_SECONDS = pipe(
   Config.integer('ANDROID_ATTESTATION_TOKEN_TTL_SECONDS'),
   Config.withDefault(60),
@@ -450,11 +512,15 @@ export const ANDROID_ATTESTATION_CRL_CACHE_TTL = pipe(
 
 export const CHALLENGE_TTL_SECONDS = pipe(
   Config.integer('CHALLENGE_TTL_SECONDS'),
+  Config.validate({
+    message: 'CHALLENGE_TTL_SECONDS must be a positive number of seconds',
+    validation: (seconds: number) => seconds > 0,
+  }),
   Config.withDefault(300),
   Config.withDescription(
     'Lifetime in seconds for challenges issued by POST /api/v1/auth/challenges. A challenge older than this ' +
       'when consumed is treated as not found. Default 5 minutes — long enough for slow networks, short enough ' +
-      'to limit replay window.',
+      'to limit replay window. Must be positive: a zero or negative value would reject every token (config DoS).',
   ),
 )
 
@@ -587,20 +653,34 @@ export const FINALIZED_BLOCK_TIMEOUT = pipe(
   Config.withDescription('Maximum time (in milliseconds) to wait for a block to be finalized'),
 )
 
-// Swagger Authentication
-export const SWAGGER_USERNAME = pipe(
-  Config.string('SWAGGER_USERNAME'),
+export const ADMIN_USERNAME = pipe(
+  Config.string('ADMIN_USERNAME'),
   Config.map((s) => s.trim()),
-  Config.withDefault('swagger'),
-  Config.withDescription('Username for accessing Swagger documentation'),
+  Config.withDefault('admin'),
+  Config.withDescription('Username for the /admin basic-auth gate'),
 )
-export const SWAGGER_PASSWORD = pipe(
+export const ADMIN_PASSWORD = pipe(
   Config.redacted(pipe(
-    Config.string('SWAGGER_PASSWORD'),
+    Config.string('ADMIN_PASSWORD'),
     Config.map((s) => s.trim()),
   )),
-  Config.withDefault(Redacted.make('swagger')),
-  Config.withDescription('Password for accessing Swagger documentation'),
+  Config.withDefault(Redacted.make('admin')),
+  Config.withDescription('Password for the /admin basic-auth gate'),
+)
+
+export const DEBUG_USERNAME = pipe(
+  Config.string('DEBUG_USERNAME'),
+  Config.map((s) => s.trim()),
+  Config.withDefault('debug'),
+  Config.withDescription('Username for the /debug basic-auth gate'),
+)
+export const DEBUG_PASSWORD = pipe(
+  Config.redacted(pipe(
+    Config.string('DEBUG_PASSWORD'),
+    Config.map((s) => s.trim()),
+  )),
+  Config.withDefault(Redacted.make('debug')),
+  Config.withDescription('Password for the /debug basic-auth gate'),
 )
 // External API URLs
 export const EXPLORER = pipe(
@@ -658,6 +738,99 @@ export const JWT_AUTH_ENFORCED = pipe(
   Config.boolean('JWT_AUTH_ENFORCED'),
   Config.withDefault(false),
   Config.withDescription('When true, require JWT on dim-ticket, invitation-ticket, notify, turn, and usernames routes'),
+)
+
+const positiveIntBudget = (fallback: number) => (config: Config.Config<number>) =>
+  config.pipe(
+    Config.withDefault(fallback),
+    Config.mapOrFail(
+      flow(
+        S.decodeEither(S.Int.pipe(S.greaterThanOrEqualTo(1))),
+        Either.mapLeft((err) => ConfigError.InvalidData([], err.message)),
+      ),
+    ),
+  )
+
+export const RATE_LIMIT_POD_DIVISOR = Config.integer('RATE_LIMIT_POD_DIVISOR').pipe(
+  positiveIntBudget(2),
+  Config.withDescription(
+    'Replica count used to derive each pod-local rate-limit budget from the overall limit. ' +
+      'Per-instance budget = ceil(overall / divisor). Tune on scale events.',
+  ),
+)
+
+export const RATE_LIMIT_AUTH_ACTIONS = Config.integer('RATE_LIMIT_AUTH_ACTIONS').pipe(
+  positiveIntBudget(30),
+  Config.withDescription('Overall requests/minute (pre-divisor) for authenticated actions'),
+)
+
+export const RATE_LIMIT_REGISTRATION = Config.integer('RATE_LIMIT_REGISTRATION').pipe(
+  positiveIntBudget(5),
+  Config.withDescription('Overall requests/minute (pre-divisor) for registration'),
+)
+
+export const RATE_LIMIT_PUBLIC_READS = Config.integer('RATE_LIMIT_PUBLIC_READS').pipe(
+  positiveIntBudget(60),
+  Config.withDescription('Overall requests/minute (pre-divisor) for public reads (global profile)'),
+)
+
+export const RATE_LIMIT_PROFILE = pipe(
+  Config.literal('shared-nat', 'global')('RATE_LIMIT_PROFILE'),
+  Config.withDefault('shared-nat' as const),
+  Config.withDescription(
+    'Rate-limit topology profile. "shared-nat": high-density shared-IP or CGNAT, where one IP fronts many ' +
+      'principals — the origin MUST NOT key on IP (it would throttle the whole shared address), so only ' +
+      'per-JWT limiting applies and unauthenticated requests are left to the edge and proof-of-compute. ' +
+      '"global": steady state where each client has its own IP — per-IP limiting of unauthenticated requests ' +
+      'is safe and enabled. Switch to "global" once the shared-IP condition no longer holds.',
+  ),
+)
+
+export const JWT_TTL_HOURS = pipe(
+  Config.number('JWT_TTL_HOURS'),
+  Config.withDefault(4),
+  Config.mapOrFail(
+    flow(
+      S.decodeEither(S.Number.pipe(S.positive(), S.finite(), S.annotations({ name: 'JWT_TTL_HOURS' }))),
+      Either.mapLeft((err) => ConfigError.InvalidData(['JWT_TTL_HOURS'], err.message)),
+    ),
+  ),
+  Config.map(Duration.hours),
+  Config.withDescription('Access-token TTL in hours'),
+)
+
+export const POC_ENABLED = pipe(
+  Config.boolean('POC_ENABLED'),
+  Config.withDefault(false),
+  Config.withDescription(
+    'Gate proof-of-compute on search and issue endpoints.',
+  ),
+)
+
+export const POC_DIFFICULTY_BITS = pipe(
+  Config.integer('POC_DIFFICULTY_BITS'),
+  Config.withDefault(4),
+  Config.mapOrFail(
+    flow(
+      S.decodeEither(S.Int.pipe(S.between(1, 32), S.annotations({ name: 'POC_DIFFICULTY_BITS' }))),
+      Either.mapLeft((err) => ConfigError.InvalidData([], err.message)),
+    ),
+  ),
+  Config.withDescription('Required leading zero bits of PoC work hash (1..32).'),
+)
+
+export const POC_SESSION_TTL = pipe(
+  Config.duration('POC_SESSION_TTL'),
+  Config.withDefault(Duration.seconds(60)),
+  Config.withDescription('Proof-of-compute puzzle lifetime.'),
+)
+
+export const POC_CLOCK_SKEW = pipe(
+  Config.duration('POC_CLOCK_SKEW'),
+  Config.withDefault(Duration.seconds(30)),
+  Config.withDescription(
+    'Clock skew tolerance for PoC puzzle timestamps.',
+  ),
 )
 
 export const APN_PRIVATE_KEY = pipe(

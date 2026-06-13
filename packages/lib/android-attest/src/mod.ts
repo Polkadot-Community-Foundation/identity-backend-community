@@ -27,3 +27,5 @@ export {
 export type { CrlEntry, CrlResponse } from './crl.js'
 
 export { GRAPHENEOS_VERIFIED_BOOT_KEY_FINGERPRINTS, GRAPHENEOS_VERIFIED_BOOT_KEYS } from './verified-boot-keys.js'
+
+export { GOOGLE_ROOT_CERTS } from './roots.js'

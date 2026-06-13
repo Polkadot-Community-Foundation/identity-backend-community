@@ -1,6 +1,6 @@
 import { DB, DBTest } from '#root/db/drizzle.js'
 import * as schema from '#root/db/schema.js'
-import { ChallengeServiceLive } from '#root/infrastructure/adapters/repositories/challenge.repository.js'
+import { ChallengeServiceLive } from '#root/infrastructure/adapters/challenge.service.js'
 import { AndroidAttestationCrlService } from '#root/infrastructure/android-attestation-crl.service.js'
 import { DefectReporter } from '#root/infrastructure/observability/context.js'
 import { TokenBucketRateLimiter } from '#root/infrastructure/token-bucket-rate-limiter.service.js'
@@ -89,7 +89,7 @@ const configLayer = Layer.succeed(
   }),
 )
 
-const testConfig = ConfigProvider.fromJson({
+export const testConfigJson = {
   JWT_AUTH_SECRET: 'test-secret-for-refresh-token-integration-tests-min-32-chars',
   ANDROID_PACKAGE_NAMES: [
     'io.pcf.polkadotapp',
@@ -100,7 +100,9 @@ const testConfig = ConfigProvider.fromJson({
     '7B:47:1D:1B:BC:16:F8:FD:81:1F:09:AC:E1:C0:54:1B:A4:62:E6:26:7A:2B:7B:6A:BB:EC:3F:6D:FB:EA:30:61',
   ANDROID_SIGNING_DIGEST_WEBSITE:
     '5A:A3:A6:D7:C8:F2:DE:24:2C:B0:E9:77:62:E2:E5:52:5B:0A:49:89:90:AF:E8:50:63:55:B6:F4:CB:31:27:5C',
-})
+}
+
+const testConfig = ConfigProvider.fromJson(testConfigJson)
 
 const crlStub = Layer.succeed(
   AndroidAttestationCrlService,
@@ -116,7 +118,7 @@ const jwtDependencies = Layer.mergeAll(
 
 const routeDependencies = Layer.mergeAll(
   crlStub,
-  Layer.provide(ChallengeServiceLive, DBTest),
+  ChallengeServiceLive,
   TokenBucketRateLimiter.Default,
   DefectReporter.NoOp,
 )
