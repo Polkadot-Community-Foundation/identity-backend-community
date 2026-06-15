@@ -3,27 +3,27 @@ import { decodeBase64 } from '@std/encoding'
 
 export const TokenRequestHeaders = z
   .object({
-    'Auth-ClientId': z.string().base64().openapi({
+    'Auth-ClientId': z.string().base64().max(64).openapi({
       description:
         'SR25519 public key of the client (base64-encoded, 32 bytes). The corresponding private key signs the proof payload.',
       example: 'd43593c715fdd31c61141abd04a99fd6822c8558854ccde39a5684e7a56da27d',
     }),
-    'Auth-ClientProof': z.string().min(1).openapi({
+    'Auth-ClientProof': z.string().min(1).max(128).openapi({
       description:
         'SR25519 signature over the proof payload (base64-encoded, 64 bytes). The proof payload is SHA-256(challenge || clientId || SHA-256(requestBody)).',
       example: 'obLD1OG/RrOWYNaGvNfIraXKzGVY01SyiaSKsAl0qAY=',
     }),
-    'Auth-Challenge': z.string().min(1).openapi({
+    'Auth-Challenge': z.string().min(1).max(256).openapi({
       description:
         'Server-issued challenge (base64-encoded). The client includes this in the proof payload to prevent replay attacks.',
       example: 'ASNFZ4mrze8BI0VniavN7wEjRWeJq83vASNFZ4mrze8=',
     }),
-    'Auth-Payload': z.optional(z.string()).openapi({
+    'Auth-Payload': z.optional(z.string().max(16384)).openapi({
       description:
         'Platform attestation proof (base64-encoded). iOS: Apple App Attest assertion. Android: Google Play Integrity token. Required when platform attestation is enforced (ENFORCE_AUTH=true); omit when attestation is disabled.',
       example: 'obLD1OG/RrOWYNaGvNfIraXKzGVY01SyiaSKsAl0qAY=',
     }),
-    'Auth-iOS-KeyId': z.optional(z.string()).openapi({
+    'Auth-iOS-KeyId': z.optional(z.string().max(64)).openapi({
       description:
         'Apple App Attest key identifier (base64-encoded). Required for iOS clients when platform attestation is enforced; must be absent for Android.',
       example: 'ASNFZ4mrze8BI0VniavN7w==',
@@ -43,7 +43,7 @@ export const TokenRequestHeaders = z
         "Android attestation dispatch header. Conditionally required: must be present when Auth-Android-Package or attestationChain body is provided. Use 'play-integrity' with Auth-Android-Package and Auth-Payload; use 'key-attestation' with attestationChain in the request body; use 'voucher' with Auth-Voucher-Secret. Ignored for iOS.",
       example: 'key-attestation',
     }),
-    'Auth-Voucher-Secret': z.optional(z.string()).openapi({
+    'Auth-Voucher-Secret': z.optional(z.string().max(64)).openapi({
       description:
         'Voucher secret scanned from a paper QR (base64-encoded, 32 bytes). Required when Auth-Attestation-Type is voucher. Single-use.',
       example: 'obLD1OG/RrOWYNaGvNfIraXKzGVY01SyiaSKsAl0qAY=',
@@ -67,7 +67,7 @@ export const TokenRequestHeaders = z
   .openapi({ title: 'TokenRequestHeaders' })
 
 export const TokenRequest = z.object({
-  attestationChain: z.optional(z.array(z.base64()).min(2).max(10)).openapi({
+  attestationChain: z.optional(z.array(z.base64().max(8192)).min(2).max(10)).openapi({
     description: 'Android Keystore certificate chain — each element is a Base64-encoded DER certificate. ' +
       'Leaf cert first, then intermediates ending at a cert chained to Google root CA. ' +
       'Required when Auth-Attestation-Type is key-attestation.',
@@ -122,7 +122,7 @@ export const TokenResponse = z
 
 export const RefreshTokenRequest = z
   .object({
-    refreshToken: z.string().base64().openapi({
+    refreshToken: z.string().base64().max(128).openapi({
       description:
         'Opaque refresh token previously issued by `POST /consumer_registrationtoken` or a prior `POST /v1/token/refresh`. Must be exactly 44 base64 characters. Each token is single-use — after rotation, the submitted token is permanently revoked.',
       example: 'obLD1OG/RrOWYNaGvNfIraXKzGVY01SyiaSKsAl0qAY=',

@@ -1,9 +1,13 @@
+import { deriveDefaultLimits, sharedNatClause } from '@identity-backend/rate-limit-sizing'
 import { Match, Option } from 'effect'
 
 export interface EdgePolicyInput {
   readonly zoneId: $util.Input<string>
   readonly plan: 'free' | 'pro' | 'business'
   readonly profile: 'shared-nat' | 'global'
+  readonly sharedNatCidrs: readonly string[]
+  readonly population: number
+  readonly pods: number
 }
 
 type Plan = EdgePolicyInput['plan']
@@ -71,7 +75,7 @@ const ENDPOINT_CLASSES: readonly EndpointClass[] = [
   {
     ref: 'handshake',
     description: 'JWT-auth handshake (challenge, attestation, token)',
-    paths: ['/api/v1/auth/', '/api/v1/token'],
+    paths: ['/api/v1/auth/'],
     requestsPerMinute: 10,
     blockSeconds: 120,
     countFailedAuthOnly: true,
@@ -86,13 +90,15 @@ const ENDPOINT_CLASSES: readonly EndpointClass[] = [
   },
   {
     ref: 'public_reads',
-    description: 'Public reads (search, availability, schemas, vapid, attester)',
+    description:
+      'Public reads and proof-of-compute issuance (search, availability, schemas, vapid, attester, poc/issue)',
     paths: [
       '/api/v1/usernames/search',
       '/api/v1/usernames/available',
       '/api/v1/schemas',
       '/api/v1/subscriptions/vapid-public-key',
       '/api/v1/attester',
+      '/api/v1/poc/issue',
     ],
     requestsPerMinute: 60,
     blockSeconds: 60,
@@ -119,6 +125,8 @@ const byRef = (...refs: readonly string[]) =>
   ENDPOINT_CLASSES.filter((c) => refs.includes(c.ref)).flatMap((c) => c.paths)
 const NO_PRINCIPAL_PATHS = byRef('token_refresh', 'handshake', 'public_reads')
 const AUTHENTICATED_PATHS = byRef('registration', 'authenticated_actions')
+const ALL_RATE_LIMITED_PATHS = ENDPOINT_CLASSES.flatMap((c) => c.paths)
+const OVERSIZED_BODY_CAP_PATHS = [...byRef('handshake'), '/api/v1/notify']
 
 const pathPredicate = (path: string) => `http.request.uri.path starts_with "${path}"`
 const anyPath = (paths: readonly string[]) => `(${paths.map(pathPredicate).join(' or ')})`
@@ -174,13 +182,13 @@ const perClassRule = (cls: EndpointClass, index: number, keying: Keying) => {
 const ipRule = (cfg: {
   readonly ref: string
   readonly description: string
-  readonly paths: readonly string[]
+  readonly expression: string
   readonly requestsPerMinute: number
   readonly withResponse: boolean
 }) => ({
   ref: cfg.ref,
   description: cfg.description,
-  expression: anyPath(cfg.paths),
+  expression: cfg.expression,
   action: 'block',
   ratelimit: {
     characteristics: IP_SRC,
@@ -194,12 +202,37 @@ const ipRule = (cfg: {
 const COARSE =
   'Coarse ip.src bucket (plan allows few rate-limit rules). In a shared-NAT profile this cannot distinguish principals behind one IP; the origin per-JWT limiter is the per-principal control.'
 
-const collapsedRules = (withResponse: boolean, twoRules: boolean) => {
+const collapsedRules = (input: EdgePolicyInput, withResponse: boolean, twoRules: boolean) => {
+  const derived = deriveDefaultLimits(input.population, input.pods)
+  if (input.sharedNatCidrs.length > 0) {
+    const offNat = ipRule({
+      ref: 'off_shared_nat',
+      description:
+        `All rate-limited paths from IPs outside the configured shared-NAT egress — a tight per-IP bucket sized to one principal's peak in infra/rate-limit-sizing.ts. ${COARSE}`,
+      expression: `${anyPath(ALL_RATE_LIMITED_PATHS)} and not ${sharedNatClause(input.sharedNatCidrs)}`,
+      requestsPerMinute: derived.offNatPerIpRpm,
+      withResponse,
+    })
+    if (!twoRules) {
+      return [offNat]
+    }
+    const sharedNat = ipRule({
+      ref: 'shared_nat',
+      description:
+        'Configured shared-NAT egress IP(s) where one public IP fronts many principals (CGNAT, conference / office WiFi). Ceiling derived in infra/rate-limit-sizing.ts as min(population peak demand, tightest class capacity); per-principal control is the per-JWT origin limiter, proof-of-compute on search, and platform attestation on the bootstrap. This ceiling only caps a catastrophic edge-bypass flood from the shared IP.',
+      expression: `${anyPath(ALL_RATE_LIMITED_PATHS)} and ${sharedNatClause(input.sharedNatCidrs)}`,
+      requestsPerMinute: derived.sharedNatCeilingRpm,
+      withResponse,
+    })
+    return [sharedNat, offNat]
+  }
+
   const first = ipRule({
     ref: 'no_principal',
-    description: `No-principal and public paths. ${COARSE}`,
-    paths: NO_PRINCIPAL_PATHS,
-    requestsPerMinute: 1200,
+    description:
+      `No-principal and public paths. No shared-NAT egress configured, so this coarse bucket uses the shared-NAT ceiling from infra/rate-limit-sizing.ts — any IP may front a NAT, and false-loose (bounded by per-JWT, proof-of-compute, attestation) is safer than nuking an unconfigured NAT. ${COARSE}`,
+    expression: anyPath(NO_PRINCIPAL_PATHS),
+    requestsPerMinute: derived.sharedNatCeilingRpm,
     withResponse,
   })
   return Match.value(twoRules).pipe(
@@ -211,9 +244,10 @@ const collapsedRules = (withResponse: boolean, twoRules: boolean) => {
       first,
       ipRule({
         ref: 'authenticated',
-        description: `Authenticated paths flood guard. ${COARSE}`,
-        paths: AUTHENTICATED_PATHS,
-        requestsPerMinute: 6000,
+        description:
+          `Authenticated paths flood guard, sized to the shared-NAT ceiling from infra/rate-limit-sizing.ts. ${COARSE}`,
+        expression: anyPath(AUTHENTICATED_PATHS),
+        requestsPerMinute: derived.sharedNatCeilingRpm,
         withResponse,
       }),
     ]),
@@ -237,8 +271,8 @@ const rulesFor = (input: EdgePolicyInput) => {
   // talks to Cloudflare's API (where it would silently disable the overage).
   const rules = Match.value(input.plan).pipe(
     Match.when('business', () => perClassRules(keyingFor(input))),
-    Match.when('pro', () => collapsedRules(true, true)),
-    Match.when('free', () => collapsedRules(false, false)),
+    Match.when('pro', () => collapsedRules(input, true, true)),
+    Match.when('free', () => collapsedRules(input, false, false)),
     Match.exhaustive,
   )
   assertPlanQuotaFits(input.plan, 'rateLimit', rules.length)
@@ -289,9 +323,10 @@ export function applyEdgePolicy(input: EdgePolicyInput) {
     phase: 'http_ratelimit',
     rules: rulesFor(input),
   })
-  // Custom firewall rules. Today we ship 3 rules (path block, prefix block,
-  // UA block); the count is verified at deploy time against the active plan's
-  // `http_request_firewall_custom` quota via `assertPlanQuotaFits`.
+  // Custom firewall rules. Today we ship 4 rules (path block, prefix block,
+  // UA block, oversized-tight-cap-body block); the count is verified at deploy
+  // time against the active plan's `http_request_firewall_custom` quota via
+  // `assertPlanQuotaFits`.
   const customFirewallRules = [
     {
       ref: 'block_internal_only_paths',
@@ -311,6 +346,16 @@ export function applyEdgePolicy(input: EdgePolicyInput) {
       ref: 'block_scripted_user_agents',
       description: 'Block scripted clients the official app never sends. IP-independent; contains works on all plans.',
       expression: BLOCKED_USER_AGENTS.map((ua) => `(http.user_agent contains "${ua}")`).join(' or '),
+      action: 'block',
+    },
+    {
+      ref: 'block_oversized_tight_cap_bodies',
+      description: 'Block oversized bodies on the tight-cap route families before they reach the origin. ' +
+        'These are the handshake paths (/api/v1/auth/*) and the push notify paths (/api/v1/notify/*) — the ' +
+        'two families the per-route Hono body-size gate caps at MAX_BODY_BYTES_HANDSHAKE (default 16 KB). This ' +
+        'edge rule catches bodies over 64 KB on those paths at the CDN, saving origin bandwidth and memory; the ' +
+        'origin gate still enforces the tighter 16 KB cap on anything under 64 KB.',
+      expression: `(http.request.body.size gt 65536) and ${anyPath(OVERSIZED_BODY_CAP_PATHS)}`,
       action: 'block',
     },
   ]

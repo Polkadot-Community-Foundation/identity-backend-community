@@ -15,7 +15,7 @@ import { bridgeSpanContext } from '@identity-backend/observability'
 
 import { classifySearchPrefix } from '#root/routes/v1/username/username-prefix-match.js'
 import { searchUsernames } from '#root/routes/v1/username/username-prefix-match.store.js'
-import { Array, Cause, Effect, Exit, Layer, Runtime, Schema as S } from 'effect'
+import { Array, Cause, Effect, Either, Exit, Layer, Runtime, Schema as S } from 'effect'
 import { SearchUsernamesV1RouteConfig } from './username-search.config.js'
 import { SearchUsernamesV1QuerySchema, SearchUsernamesV1ResponseSchema } from './username-search.dto.js'
 
@@ -27,6 +27,7 @@ const MAX_SEARCH_LIMIT = 1000
 type UsernameDbRecord = S.Schema.Type<typeof SelectIndividualityUsernameWithDigitsSchema>
 
 export const CursorDataSchema = S.Struct({
+  key: S.String,
   username: S.String,
   digits: S.Number.pipe(S.positive(), S.int()),
   timestamp: S.compose(S.DateFromString, S.ValidDateFromSelf),
@@ -106,7 +107,12 @@ export const makeSearchUsernamesRouteWithoutDependencies = Effect.gen(function*(
       })
 
       const [corruptRows, items] = Array.separate(
-        rows.map((row) => S.decodeUnknownEither(SelectIndividualityUsernameWithDigitsSchema)(row)),
+        rows.map((row) =>
+          Either.map(
+            S.decodeUnknownEither(SelectIndividualityUsernameWithDigitsSchema)(row),
+            (record) => ({ ...record, searchKey: row.searchKey }),
+          )
+        ),
       )
 
       if (corruptRows.length > 0) {
@@ -158,7 +164,7 @@ export const makeSearchUsernamesRouteWithoutDependencies = Effect.gen(function*(
           items,
           limit: effectiveLimit,
           schema: CursorDataSchema,
-          extractCursor: (item) => ({ username: item.username, digits: item.digits }),
+          extractCursor: (item) => ({ key: item.searchKey, username: item.username, digits: item.digits }),
         })
         const usernames = mapUsernamesToResponse(includeOnchainData ?? false)(pageItems)
 

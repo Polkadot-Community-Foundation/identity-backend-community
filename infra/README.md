@@ -166,11 +166,13 @@ For a complete walkthrough including the Cloudflare account setup, the Apple enr
 
 Everything keys off two environment variables, resolved once in `sst.config.ts` and passed to both the origin and the edge so they never disagree:
 
-| Variable             | Values                                | When to use                                                                                            |
-| :------------------- | :------------------------------------ | :----------------------------------------------------------------------------------------------------- |
-| `RATE_LIMIT_PROFILE` | `shared-nat` (default)                | Many clients behind one IP (NAT/CGNAT). Origin rate-limits per JWT only; edge splits on Business plan. |
-|                      | `global`                              | Each client has its own IP. Per-IP limiting at both layers.                                            |
-| `CLOUDFLARE_PLAN`    | `free` / `pro` (default) / `business` | Controls how many edge rate-limit rules are available and which counting characteristics work.         |
+| Variable                | Values                                | When to use                                                                                                                                                                                                               |
+| :---------------------- | :------------------------------------ | :------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ |
+| `RATE_LIMIT_PROFILE`    | `shared-nat` (default)                | Many clients behind one IP (NAT/CGNAT). Origin rate-limits per JWT only; edge splits on Business plan.                                                                                                                    |
+|                         | `global`                              | Each client has its own IP. Per-IP limiting at both layers.                                                                                                                                                               |
+| `CLOUDFLARE_PLAN`       | `free` / `pro` (default) / `business` | Controls how many edge rate-limit rules are available and which counting characteristics work.                                                                                                                            |
+| `SHARED_NAT_CIDRS`      | space/comma CIDR list (default empty) | Known, static shared-NAT egress IP(s) (venue/office/CGNAT). When set on Pro/Free, the edge carves that IP out: it gets a generous bounded ceiling while every other IP keeps a tight per-IP bucket. Empty = no carve-out. |
+| `SHARED_NAT_POPULATION` | positive int (default `1000`)         | Expected concurrent principals behind the shared-NAT IP. Feeds `@identity-backend/rate-limit-sizing` to derive the shared-NAT ceiling.                                                                                    |
 
 **MUST agree** across layers. The deploy-time safety net (`assertPlanQuotaFits` in `infra/edge.ts`) throws if the rule count exceeds the plan's quota; but the **Cloudflare API** is the final word on plan compatibility — a misconfigured `cf.unique_visitor_id` on a Pro plan fails silently. See `first-time-setup.md` stuck point #6.
 

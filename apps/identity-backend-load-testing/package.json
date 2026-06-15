@@ -24,6 +24,7 @@
     "loadgen:jwt-tokens": "REGISTER_PAYLOADS=$PWD/register-payloads.jsonl JWT_TOKENS=$PWD/jwt-tokens.json pnpm loadgen jwt-tokens",
     "loadgen:discover-prefixes": "bun run ts-setup/discover-live-prefixes.ts",
     "loadgen:analyze-perf": "bun run ts-setup/analyze-perf-run.ts",
+    "loadgen:capture-baseline": "bun run ts-setup/capture-baseline.ts",
     "loadgen:seed-usernames": "bun run ts-setup/seed-local-usernames.ts",
     "loadgen:explain-search": "bun run ts-setup/explain-search.ts",
     "test:load:register": "k6 run dist/register-flood.mjs --env BASE_URL=${BASE_URL:-http://localhost:8080} --env REGISTER_PAYLOADS=${REGISTER_PAYLOADS:-register-payloads.jsonl}",

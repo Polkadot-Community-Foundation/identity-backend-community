@@ -11,7 +11,7 @@ import {
   type DeviceCheckVariables,
 } from '@identity-backend/hono-auth/device-check'
 import type { Ss58String } from '@identity-backend/substrate-schema'
-import { Effect, HashMap, Layer, Option } from 'effect'
+import { Effect, Layer, Option } from 'effect'
 import { Hono } from 'hono'
 import type { MiddlewareHandler } from 'hono'
 import { describe, expect, vi } from 'vitest'
@@ -39,7 +39,6 @@ describe('makeRegisterUsernameRoute device-check rendering', () => {
     getMaxUsernameBaseLength: () => Effect.succeed(29),
     validateSs58Address: (address: string) => Effect.succeed(Option.some(address as Ss58String)),
     verifySignature: () => Effect.succeed(true),
-    checkUsernamesAvailability: () => Effect.succeed(HashMap.empty()),
     registerIOSDevice,
     dotnsGatewayEnabled: false,
     getDotnsTimeBounds: () => Effect.succeed({ intakeFreshnessMaxAgeSeconds: 600, maxFutureSkewSeconds: 600 }),

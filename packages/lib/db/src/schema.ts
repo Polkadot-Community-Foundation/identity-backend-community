@@ -1,3 +1,4 @@
+import { sql } from 'drizzle-orm'
 import {
   boolean,
   char,
@@ -67,6 +68,10 @@ export const individualityUsernames = polkadotAppSchema.table(
     index('individuality_username_username_sort_idx').on(table.username),
     index('individuality_username_candidate_idx').on(table.candidateAccountId),
     index('individuality_username_source_idx').on(table.source),
+    index('individuality_username_search_key_idx').on(
+      table.network,
+      sql`(lower(coalesce(${table.fullUsername}, ${table.username} || '.' || ${table.digits}))) COLLATE "C"`,
+    ),
   ],
 )
 

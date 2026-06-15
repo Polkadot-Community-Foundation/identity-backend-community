@@ -15,8 +15,9 @@ import { sr25519 } from '@identity-backend/crypto'
 import { DB } from '@identity-backend/db'
 import { Daemon } from '@identity-backend/effect-daemon-spec'
 
+import { millisecondsToSeconds } from 'date-fns/millisecondsToSeconds'
 import { and, eq } from 'drizzle-orm'
-import { Array, Context, Duration, Effect, Either, Match, Metric, Option, pipe, Ref, Schedule } from 'effect'
+import { Array, Clock, Context, Duration, Effect, Either, Match, Metric, Option, pipe, Ref, Schedule } from 'effect'
 import { Binary, type PolkadotSigner, type TxFinalized } from 'polkadot-api'
 
 type AhUtilityItemFailed = ReturnType<AhItemFailedEvFilter>[number]
@@ -468,7 +469,7 @@ export const make = Effect.gen(function*() {
           )
       }
 
-      const nowSeconds = Math.floor(Date.now() / 1000)
+      const nowSeconds = millisecondsToSeconds(yield* Clock.currentTimeMillis)
       const { maxValiditySeconds, maxFutureSkewSeconds } = dotnsGateway.chainConstants
       const submitDeadline = maxValiditySeconds - config.signedAtSafetyMarginSeconds
       const { fresh: freshRows, expired: expiredRows, future: futureRows } = partitionByFreshness(

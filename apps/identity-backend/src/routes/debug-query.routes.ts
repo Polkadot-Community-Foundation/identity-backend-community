@@ -2,7 +2,18 @@ import { DEBUG_PASSWORD, DEBUG_SQL_ENABLED, DEBUG_USERNAME } from '#root/config.
 import { DB } from '#root/db/drizzle.js'
 import { effectValidator } from '#root/lib/effect-validator.js'
 import { sql } from 'drizzle-orm'
-import { Config, Context, Duration, Effect, MutableHashMap, Option, Redacted, Schema as S } from 'effect'
+import {
+  Clock,
+  Config,
+  Context,
+  Duration,
+  Effect,
+  MutableHashMap,
+  Option,
+  Redacted,
+  Runtime,
+  Schema as S,
+} from 'effect'
 import { Hono } from 'hono'
 import { basicAuth } from 'hono/basic-auth'
 
@@ -28,13 +39,15 @@ export const makeDebugQueryRoute = Effect.gen(function*() {
   const db = yield* DB
   const config = yield* DebugQueryConfig
   const [username, password] = yield* Config.all([DEBUG_USERNAME, DEBUG_PASSWORD])
+  const runtime = yield* Effect.runtime<never>()
+  const nowMillis = (): number => Runtime.runSync(runtime)(Clock.currentTimeMillis)
 
   const windowMs = Duration.toMillis(config.rateLimitWindow)
   const timeoutSeconds = Duration.toSeconds(config.statementTimeout)
   const ipHits = MutableHashMap.empty<string, number[]>()
 
   const isRateLimited = (ip: string): boolean => {
-    const now = Date.now()
+    const now = nowMillis()
     const hits = Option.getOrElse(MutableHashMap.get(ipHits, ip), (): number[] => [])
     const recent = hits.filter((t) => now - t < windowMs)
     recent.push(now)

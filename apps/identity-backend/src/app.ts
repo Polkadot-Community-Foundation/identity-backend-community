@@ -1,8 +1,8 @@
 import { DefectReporter } from '#root/infrastructure/observability/mod.js'
 import * as PG from '#root/lib/pg-utils.js'
 import { createOpenAPIHono } from '#root/lib/problem-details.js'
-import { HttpMetricsMiddleware, Logger as HonoLoggingMiddleware } from '#root/middleware/mod.js'
-import { Cause, Clock, Config, Context, Effect, Exit, Layer, Match, pipe, Runtime, Schedule } from 'effect'
+import { HttpMetricsMiddleware, Logger as HonoLoggingMiddleware, registerBodySizeLimits } from '#root/middleware/mod.js'
+import { Cause, Clock, Config, Context, Effect, Exit, flow, Layer, Match, pipe, Runtime, Schedule } from 'effect'
 import { getConnInfo, serveStatic } from 'hono/bun'
 import { HTTPException } from 'hono/http-exception'
 import { requestId } from 'hono/request-id'
@@ -29,16 +29,22 @@ const { version } = packageJson
 
 export class AppConfig extends Context.Tag('@app/AppConfig')<AppConfig, {
   port: number
+  maxRequestBodySize: number
 }>() {}
 
-export const layerAppWithoutDependencies = Effect.gen(function*() {
+export const makeApp = Effect.gen(function*() {
   const runtime = yield* Effect.runtime<DB>()
   const db = yield* DB
   const defectReporter = yield* DefectReporter
-  const config = yield* AppConfig
   const runSync = Runtime.runSync(runtime)
   const honoLoggingMiddleware = yield* HonoLoggingMiddleware
   const httpMetricsMiddleware = yield* HttpMetricsMiddleware
+
+  const cfg = yield* Effect.promise(() => import('#root/config.js'))
+  const bodyLimits = yield* Config.all({
+    handshake: cfg.MAX_BODY_BYTES_HANDSHAKE,
+    catchAll: cfg.MAX_BODY_BYTES_DEFAULT,
+  })
 
   const app = yield* Effect.sync(() => createOpenAPIHono())
 
@@ -188,6 +194,8 @@ export const layerAppWithoutDependencies = Effect.gen(function*() {
     })
     app.use('*', honoLoggingMiddleware)
     app.use('*', httpMetricsMiddleware)
+
+    registerBodySizeLimits(app, runSync, bodyLimits)
   })
 
   const adminRoute = yield* makeAdminRoute
@@ -219,8 +227,21 @@ export const layerAppWithoutDependencies = Effect.gen(function*() {
     }),
   )
 
+  return app
+})
+
+export const layerAppWithoutDependencies = Effect.gen(function*() {
+  const app = yield* makeApp
+  const config = yield* AppConfig
+
   const server = yield* Effect.acquireRelease(
-    Effect.sync(() => Bun.serve({ port: config.port, fetch: app.fetch })),
+    Effect.sync(() =>
+      Bun.serve({
+        port: config.port,
+        fetch: app.fetch,
+        maxRequestBodySize: config.maxRequestBodySize,
+      })
+    ),
     (s) => Effect.sync(() => s.stop()),
   )
 
@@ -231,7 +252,15 @@ export const layerAppWithoutDependencies = Effect.gen(function*() {
   Effect.scoped,
   Effect.tapError(Effect.logError),
   Effect.retry({
-    schedule: Schedule.forever,
+    schedule: pipe(
+      Schedule.exponential('1 second'),
+      Schedule.upTo('30 seconds'),
+    ),
+    while: flow(
+      Match.value,
+      Match.tag('ConfigError', () => false),
+      Match.orElse(() => true),
+    ),
   }),
   Effect.fork,
   Layer.effectDiscard,
@@ -242,10 +271,11 @@ export const layerApp = layerAppWithoutDependencies.pipe(
     Layer.effect(
       AppConfig,
       Effect.gen(function*() {
-        const { PORT } = yield* Effect.promise(() => import('#root/config.js'))
+        const { PORT, MAX_BODY_BYTES_SERVER } = yield* Effect.promise(() => import('#root/config.js'))
 
         return ((yield* Config.all({
           port: PORT,
+          maxRequestBodySize: MAX_BODY_BYTES_SERVER,
         })) satisfies AppConfig['Type'])
       }),
     ),

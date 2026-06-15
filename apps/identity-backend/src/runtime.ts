@@ -21,7 +21,6 @@ import { DimTicketConfig, DimTicketShell } from './features/dim/dim-ticket.shell
 import { InvitationTicketInviterConfig, TicketPoolShell } from './features/dim/invitation-ticket-pool.shell.js'
 import { InviterSignerConfig, InviterSignerService } from './features/dim/inviter-signer.service.js'
 import { OnChainTicketAPI } from './features/dim/onchain-ticket.adapter.js'
-import { IndividualityUsernameService } from './features/individuality/services/username-availability.service.js'
 import { SubscriptionCrudShell } from './features/subscriptions/crud.shell.js'
 import { StatementSubscriber } from './features/subscriptions/pipeline/processor.shell.js'
 import { PushBroadcastUseCase } from './features/subscriptions/push-broadcast/push-broadcast.use-case.js'
@@ -160,7 +159,6 @@ const applicationServicesLive = Layer.unwrapEffect(
 
     const DatabaseServicesLive = Layer.provideMerge(
       Layer.mergeAll(
-        IndividualityUsernameService.Default,
         ChallengeServiceLive,
         AppAttestationRepositoryLive,
         SubscriptionCrudShell.Default,

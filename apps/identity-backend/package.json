@@ -31,7 +31,7 @@
     "test:ui": "vitest --ui",
     "mutation": "backend run --cmd 'stryker run --incremental' --stryker",
     "mutation:full": "backend run --guard --cmd 'stryker run'",
-    "check:env-sync": "bun run ./scripts/check-env-config-sync.ts",
+    "check:env-sync": "bun run ./scripts/check-env-config-sync.ts && bun run ./scripts/check-compose-env-sync.ts",
     "provision:vouchers": "tsx scripts/provision-voucher-secrets.ts"
   },
   "lint-staged": {

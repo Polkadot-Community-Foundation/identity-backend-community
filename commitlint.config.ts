@@ -202,23 +202,16 @@ const configuration: UserConfig = {
     'scope-empty': [2, 'always'],
 
     // Subject constraints
-    'subject-case': [2, 'always', 'lower-case'],
     'subject-empty': [2, 'never'],
-    'subject-full-stop': [2, 'never', '.'],
 
     // Length constraints
-    'header-max-length': [2, 'always', 72],
+    'header-max-length': [2, 'always', 120],
     'body-max-line-length': [2, 'always', 120],
     'footer-max-line-length': [2, 'always', 100],
 
     // Structural constraints
     'body-leading-blank': [2, 'always'],
     'footer-leading-blank': [2, 'always'],
-    'header-full-stop': [2, 'never', '.'],
-    'body-full-stop': [2, 'never', '.'],
-
-    // References encouraged but not required
-    'references-empty': [1, 'never'],
   },
 
   defaultIgnores: true,

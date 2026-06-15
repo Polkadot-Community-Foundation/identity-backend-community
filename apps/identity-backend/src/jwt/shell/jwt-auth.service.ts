@@ -85,8 +85,8 @@ export class JWTAuthService extends Context.Tag('identity-backend/jwt/shell/jwt-
       JWTAuthServiceDefaults,
       Effect.gen(function*() {
         const defaults = yield* JWTAuthServiceDefaults
-        const { JWT_TTL_HOURS } = yield* Effect.promise(() => import('#root/config.js'))
-        const tokenDuration = yield* JWT_TTL_HOURS
+        const { JWT_TTL } = yield* Effect.promise(() => import('#root/config.js'))
+        const tokenDuration = yield* JWT_TTL
         return { ...defaults, tokenDuration }
       }),
     )),

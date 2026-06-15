@@ -1,5 +1,4 @@
 import { MAX_USERNAME_LENGTH, N_USERNAME_DIGITS } from '#root/constants.js'
-import { IndividualityUsernameService } from '#root/features/individuality/services/username-availability.service.js'
 import { DotnsGatewayAPI } from '#root/infrastructure/adapters/blockchain/dotns-gateway.adapter.js'
 import { DeviceCheckService } from '@identity-backend/auth/services'
 import { Effect, Layer, Option, Schema as S } from 'effect'
@@ -16,7 +15,6 @@ export const layerRegisterUsernameV1Routes = Layer.effect(
       PEOPLE_NETWORK,
       DOTNS_GATEWAY_ENABLED,
     } = yield* Effect.promise(() => import('#root/config.js'))
-    const usernameService = yield* IndividualityUsernameService
     const deviceCheckOption = yield* Effect.serviceOption(DeviceCheckService)
 
     const registerIOSDevice: DeviceCheckService['Type']['register'] = Option.match(deviceCheckOption, {
@@ -80,7 +78,6 @@ export const layerRegisterUsernameV1Routes = Layer.effect(
       getMaxUsernameBaseLength,
       validateSs58Address,
       verifySignature,
-      checkUsernamesAvailability: usernameService.checkAvailability,
       registerIOSDevice,
       dotnsGatewayEnabled,
       getDotnsTimeBounds,

@@ -2,6 +2,8 @@ import { it } from '@effect/vitest'
 import { Effect, Layer } from 'effect'
 import { encodeBase64 } from 'effect/Encoding'
 import { Hono } from 'hono'
+import type { Context as HonoContext } from 'hono'
+import { bodyLimit } from 'hono/body-limit'
 import { testClient } from 'hono/testing'
 import { afterEach, describe, expect, vi } from 'vitest'
 import { AppAttestMiddlewareConfig, makeAppAttestMiddleware } from '../middleware.js'
@@ -375,6 +377,139 @@ describe('AppleAttestMiddleware', () => {
           const payload = yield* Effect.promise(() => res.json())
           expect(payload).toEqual({ error: 'Missing iOS package name header' })
           expect(res.status).toEqual(401)
+        }))
+    })
+
+    describe('Body read after an upstream middleware consumed the raw request', () => {
+      const authHeaders = {
+        'Auth-iOS-Package': 'valid-package',
+        'Auth-iOS-KeyId': encodeBase64('test-key-id'),
+        'Auth-Payload': encodeBase64('test-payload'),
+        'Auth-Challenge': encodeBase64('test-challenge'),
+        'Auth-ClientId': encodeBase64(new Uint8Array(32).fill(0)),
+      }
+
+      const upstreamBodyReader = async (ctx: HonoContext, next: () => Promise<void>) => {
+        await ctx.req.arrayBuffer()
+        return next()
+      }
+
+      const makeApp = (opts: { maxSize?: number; upstreamReadsBody?: boolean }) =>
+        Effect.gen(function*() {
+          const appAttestMiddleware = yield* makeAppAttestMiddleware
+
+          return yield* Effect.sync(() => {
+            const app = new Hono()
+            if (opts.upstreamReadsBody) app.use(upstreamBodyReader)
+            if (opts.maxSize !== undefined) {
+              app.use(
+                bodyLimit({ maxSize: opts.maxSize, onError: (ctx) => ctx.json({ error: 'Payload Too Large' }, 413) }),
+              )
+            }
+            return app
+              .use(appAttestMiddleware)
+              .post('/test', async (ctx) => {
+                const routeBody = new Uint8Array(await ctx.req.arrayBuffer())
+                return ctx.json({ success: true, routeBodyLen: routeBody.length }, 200)
+              })
+          })
+        })
+
+      const mockSuccessRequiringClientData = (expectedText: string) =>
+        Effect.sync(() => {
+          isPackageNameValid.mockImplementation(() => Effect.succeed(true))
+          consumeChallenge.mockImplementation(() => Effect.succeed(void 0))
+          getAssertion.mockImplementation(() =>
+            Effect.succeed({
+              attestation: { publicKey: 'test-pub-key', signCount: 0 },
+              publicKey: {} as CryptoKey,
+            })
+          )
+          verifyAssertion.mockImplementation(({ clientData }) =>
+            new TextDecoder().decode(clientData) === expectedText
+              ? Effect.succeed({ publicKey: {} as CryptoKey, nextSignCount: 1 })
+              : Effect.fail(AppAttestError.make({ cause: 'clientData did not match request body' }))
+          )
+          commitAssertion.mockImplementation(() => Effect.succeed(void 0))
+        })
+
+      it.effect('Should_VerifyFullBodyAndKeepItReadable_When_UpstreamMiddlewareAlreadyConsumedRawRequest', (c) =>
+        Effect.gen(function*() {
+          const app = yield* makeApp({ upstreamReadsBody: true })
+          const bodyText = 'app-attest-client-data-body'
+          const bodyBytes = new TextEncoder().encode(bodyText)
+          yield* mockSuccessRequiringClientData(bodyText)
+
+          const res = yield* Effect.promise(async () =>
+            app.request('/test', { method: 'POST', headers: authHeaders, body: bodyText })
+          )
+          const payload = yield* Effect.promise(() => res.json())
+
+          c.expect(res.status).toEqual(200)
+          c.expect(payload).toEqual({ success: true, routeBodyLen: bodyBytes.length })
+        }))
+
+      it.effect('Should_Reject401_When_ClientDataDoesNotMatchVerifiedBody', (c) =>
+        Effect.gen(function*() {
+          const app = yield* makeApp({ upstreamReadsBody: true })
+          yield* mockSuccessRequiringClientData('an-entirely-different-client-data')
+
+          const res = yield* Effect.promise(async () =>
+            app.request('/test', { method: 'POST', headers: authHeaders, body: 'the-real-request-body' })
+          )
+          const payload = yield* Effect.promise(() => res.json())
+
+          c.expect(res.status).toEqual(401)
+          c.expect(payload).toEqual(expect.objectContaining({
+            error: expect.stringMatching(/^Invalid App Attest assertion/),
+          }))
+        }))
+
+      it.effect('Should_Reject413_When_BodyExceedsLimit', (c) =>
+        Effect.gen(function*() {
+          const app = yield* makeApp({ maxSize: 8 })
+          const bodyText = 'this-app-attest-body-is-far-larger-than-eight-bytes'
+          yield* mockSuccessRequiringClientData(bodyText)
+
+          const res = yield* Effect.promise(async () =>
+            app.request('/test', { method: 'POST', headers: authHeaders, body: bodyText })
+          )
+          const payload = yield* Effect.promise(() => res.json())
+
+          c.expect(res.status).toEqual(413)
+          c.expect(payload).toEqual({ error: 'Payload Too Large' })
+        }))
+
+      it.effect('Should_Return401_When_RequestHasNoBody', (c) =>
+        Effect.gen(function*() {
+          const app = yield* makeApp({})
+          yield* mockSuccessRequiringClientData('unused')
+
+          const res = yield* Effect.promise(async () => app.request('/test', { method: 'POST', headers: authHeaders }))
+          const payload = yield* Effect.promise(() => res.json())
+
+          c.expect(res.status).toEqual(401)
+          c.expect(payload).toEqual({ error: 'Missing App Attest assertion body' })
+        }))
+
+      it.effect('Should_Return500_When_BodyStreamFailsToRead', (c) =>
+        Effect.gen(function*() {
+          const app = yield* makeApp({})
+          yield* mockSuccessRequiringClientData('unused')
+          const erroringBody = new ReadableStream({
+            pull(ctrl) {
+              ctrl.error(new Error('connection reset while reading body'))
+            },
+          })
+
+          const res = yield* Effect.promise(async () =>
+            app.request(
+              '/test',
+              { method: 'POST', headers: authHeaders, body: erroringBody, duplex: 'half' } as RequestInit,
+            )
+          )
+
+          c.expect(res.status).toEqual(500)
         }))
     })
   })

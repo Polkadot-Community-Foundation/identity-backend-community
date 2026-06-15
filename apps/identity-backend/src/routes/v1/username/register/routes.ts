@@ -1,7 +1,6 @@
 import { REGISTER_SIGNATURE_MESSAGE_PREFIX, USERNAME_DIGIT_V1_SET } from '#root/constants.js'
 import { DB } from '#root/db/drizzle.js'
 import * as schema from '#root/db/schema.js'
-import type { IndividualityUsernameService } from '#root/features/individuality/services/username-availability.service.js'
 import * as DigitSelection from '#root/features/username-registration/digit-selection.js'
 import { createOpenAPIHono, ProblemDetailWithErrorsZod, problemResponse } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
@@ -10,6 +9,7 @@ import {
   peopleUsernameRegistrationsIntakeCounter,
 } from '#root/metrics/people.js'
 import { makeDeviceCheckIOSMiddleware } from '#root/middleware/auth/device-check.js'
+import { checkUsernameAvailability } from '#root/routes/v1/username/username-prefix-match.store.js'
 import { BaseUsername, UsernameDigits } from '#root/schema/username.js'
 import type { HttpBindings } from '@hono/node-server'
 import { createRoute, z } from '@hono/zod-openapi'
@@ -19,8 +19,10 @@ import { bridgeSpanContext } from '@identity-backend/observability'
 import type { Ss58String } from '@identity-backend/substrate-schema'
 import type { SpanContext } from '@opentelemetry/api'
 import { encodeHex } from '@std/encoding'
+import { millisecondsToSeconds } from 'date-fns/millisecondsToSeconds'
 import {
   Cause,
+  Clock,
   Context,
   Effect,
   Either,
@@ -63,7 +65,6 @@ export class RegisterUsernamesV1RouteConfig
       getMaxUsernameBaseLength: () => Effect.Effect<number>
       validateSs58Address: (address: string) => Effect.Effect<Option.Option<Ss58String>>
       verifySignature: (params: VerifySignatureParams) => Effect.Effect<boolean>
-      checkUsernamesAvailability: IndividualityUsernameService['checkAvailability']
       registerIOSDevice: DeviceCheckService['Type']['register']
       dotnsGatewayEnabled: boolean
       getDotnsTimeBounds: () => Effect.Effect<{
@@ -106,7 +107,6 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
     getMaxUsernameBaseLength: getMaxUsernameLength,
     validateSs58Address,
     verifySignature,
-    checkUsernamesAvailability,
     registerIOSDevice,
     dotnsGatewayEnabled,
     getDotnsTimeBounds,
@@ -211,7 +211,7 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
                           })
                           return
                         }
-                        const nowSeconds = Math.floor(Date.now() / 1000)
+                        const nowSeconds = millisecondsToSeconds(yield* Clock.currentTimeMillis)
                         const { signedAt } = body.dotns
                         const { intakeFreshnessMaxAgeSeconds, maxFutureSkewSeconds } = yield* getDotnsTimeBounds()
 
@@ -345,7 +345,8 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
         } = c.req.valid('json')
 
         const handler = Effect.gen(function*() {
-          const availability = yield* checkUsernamesAvailability({
+          const availability = yield* checkUsernameAvailability({
+            network: config.network,
             usernames: HashSet.make(BaseUsername.make(baseUsername)),
           })
 
@@ -495,6 +496,7 @@ export const makeRegisterUsernameRouteWithoutDependencies = Effect.gen(function*
         )
 
         const result = await bridgeSpanContext(handler, c).pipe(
+          Effect.provideService(DB, db),
           Effect.provide(Layer.succeed(Random.Random, random)),
           Effect.map((value) => c.json(value, 202)),
           Effect.catchTag(

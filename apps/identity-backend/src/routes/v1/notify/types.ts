@@ -29,11 +29,12 @@ export const PushSendRequest = z.object({
   platform: z.enum(['ios', 'android']).optional().openapi({
     description: 'Platform (optional, will be auto-detected if not provided)',
   }),
-  bundlerId: z.string().optional().openapi({
+  bundlerId: z.string().max(256).optional().openapi({
     description: 'Bundle identifier (optional, overrides configured APN topics for iOS)',
     examples: ['com.example.app'],
   }),
   message: z.string()
+    .max(8192)
     .regex(HEX_STRING_REGEXP, 'Must be a valid hexadecimal string')
     .openapi({
       description: 'Hex-encoded message to send',
@@ -105,6 +106,7 @@ const PushIdSchema = S.String.pipe(
 
 const MessageSchema = S.String.pipe(
   S.pattern(HEX_STRING_REGEXP),
+  S.maxLength(8192),
   S.annotations({
     title: 'Message',
     description: 'Hex-encoded message to send',
@@ -115,7 +117,7 @@ export class PushSendRequestClass extends S.Class<PushSendRequestClass>('PushSen
   deviceToken: DeviceTokenSchema,
   pushId: PushIdSchema,
   platform: S.optional(S.Literal('ios', 'android')),
-  bundlerId: S.optional(S.String),
+  bundlerId: S.optional(S.String.pipe(S.maxLength(256))),
   message: MessageSchema,
   voip: S.optional(S.Boolean),
 }) {}

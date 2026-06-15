@@ -4,6 +4,7 @@ export interface ServiceInput {
   readonly cluster: sst.aws.Cluster
   readonly database: sst.aws.Postgres
   readonly profile: 'shared-nat' | 'global'
+  readonly pods: number
   readonly deploymentConfig: Record<string, string>
   readonly otlpHttpEndpoint: $util.Input<string>
   readonly hostname: string | undefined
@@ -137,11 +138,7 @@ export function deployService(input: ServiceInput) {
       PORT: '8080',
       DATABASE_URL: databaseUrl,
       RATE_LIMIT_PROFILE: input.profile,
-      RATE_LIMIT_POD_DIVISOR: '2',
-      RATE_LIMIT_AUTH_ACTIONS: '30',
-      RATE_LIMIT_REGISTRATION: '5',
-      RATE_LIMIT_PUBLIC_READS: '60',
-      JWT_TTL_HOURS: '4',
+      RATE_LIMIT_POD_DIVISOR: String(input.pods),
       OTEL_EXPORTER_OTLP_ENDPOINT: input.otlpHttpEndpoint,
       OTEL_EXPORTER_OTLP_PROTOCOL: 'http/protobuf',
     },

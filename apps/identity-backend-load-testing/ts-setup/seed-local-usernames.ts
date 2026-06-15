@@ -1,6 +1,7 @@
 #!/usr/bin/env bun
 import { once } from 'node:events'
 import { writeFileSync } from 'node:fs'
+import { join } from 'node:path'
 import { finished } from 'node:stream/promises'
 import { Pool } from 'pg'
 import { from as copyFrom } from 'pg-copy-streams'
@@ -13,7 +14,7 @@ const COUNT = Math.min(
 const DATABASE_URL = process.env.DATABASE_URL || 'postgres://postgres:password@localhost:15432/identity_backend'
 const NETWORK = 'westend2'
 const PREFIX_SAMPLE_SIZE = 1024
-const MANIFEST_PATH = process.env.PREFIX_MANIFEST || 'apps/identity-backend-load-testing/prefixes.json'
+const MANIFEST_PATH = process.env.PREFIX_MANIFEST || join(import.meta.dir, '..', 'prefixes.json')
 const ALLOW_PRODUCTION = process.env.SEED_ALLOW_PRODUCTION === '1'
 
 export function looksLikeProductionUrl(databaseUrl: string): boolean {
@@ -43,6 +44,7 @@ const COLUMNS = [
   'username',
   'digits',
   'network',
+  'full_username',
   'candidate_account_id',
   'candidate_signature',
   'ring_vrf_key',
@@ -52,15 +54,26 @@ const COLUMNS = [
   'signed_at',
 ]
 
+const FULL_USERNAME_PERIOD = 10
+const FULL_USERNAME_SHARE = 3
+const COPY_NULL = '\\N'
+
 function hex(n: number): string {
   return `0x${n.toString(16).padStart(64, '0')}`
 }
 
+function fullUsername(index: number, username: string): string {
+  if (index % FULL_USERNAME_PERIOD >= FULL_USERNAME_SHARE) return COPY_NULL
+  return `${username}_${generateUsername(PROFILE, index + 1_000_003)}`
+}
+
 function row(index: number, signedAt: string): string {
+  const username = generateUsername(PROFILE, index)
   return [
-    generateUsername(PROFILE, index),
+    username,
     String(index).padStart(10, '0'),
     NETWORK,
+    fullUsername(index, username),
     hex(index),
     hex(index),
     hex(index),

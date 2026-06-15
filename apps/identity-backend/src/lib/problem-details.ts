@@ -8,7 +8,7 @@ import type { ZodIssue } from 'zod'
 
 export const SMARTBEAR = 'https://problems-registry.smartbear.com' as const
 
-export type ProblemStatus = 400 | 401 | 402 | 403 | 404 | 409 | 422 | 429 | 500 | 503
+export type ProblemStatus = 400 | 401 | 402 | 403 | 404 | 409 | 413 | 422 | 429 | 500 | 503
 
 export const PROBLEM_TYPES = [
   'about:blank',
@@ -16,6 +16,7 @@ export const PROBLEM_TYPES = [
   'unauthorized',
   'payment-required',
   'too-many-requests',
+  'payload-too-large',
   'bad-request',
   'not-found',
   'already-exists',

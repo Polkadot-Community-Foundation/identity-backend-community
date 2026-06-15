@@ -1,5 +1,6 @@
 export { makeDeviceCheckIOSMiddleware } from './auth/device-check.js'
 export { makeAuthPlugin as AuthPlugin } from './auth/mod.js'
+export { type BodySizeLimits, registerBodySizeLimits } from './body-size-limit.middleware.js'
 export * from './http-metrics.js'
 export * from './http-primitives.js'
 export * from './logger.js'

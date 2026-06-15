@@ -22,12 +22,24 @@ export interface Regression {
   detail: string
 }
 
-export type Verdict = 'pass' | 'regressed' | 'no_baseline'
+export type Verdict = 'pass' | 'regressed' | 'no_baseline' | 'infra_failure'
+
+export type InfraFailureSignal = 'summary_absent' | 'base_url_missing' | 'target_unreachable'
+
+export interface InfraFailureReason {
+  readonly signal: InfraFailureSignal
+  readonly detail: string
+}
+
+export type BaselineCapture =
+  | Readonly<{ ok: true; baseline: Record<string, Record<string, number>> }>
+  | Readonly<{ ok: false; reason: string }>
 
 export interface PerfReport {
   schemaVersion: string
   run: RunMeta
   verdict: Verdict
+  infraFailure: InfraFailureReason | null
   signature: string
   regressions: Regression[]
   observed: Record<string, number>
@@ -52,6 +64,7 @@ const ERROR_METRIC = 'http_req_failed'
 const CORRECTNESS_METRIC = 'correctness_failures'
 const CHECKS_METRIC = 'checks'
 const ENDPOINT_TAG = /[{,]endpoint:([^,}]+)[,}]/
+const UNREACHABLE_SERVER_P95_FLOOR_MS = 1
 
 function isRecord(value: unknown): value is Record<string, unknown> {
   return typeof value === 'object' && value !== null && !Array.isArray(value)
@@ -183,18 +196,36 @@ function checksRegressions(input: AnalyzeInput): Regression[] {
     : []
 }
 
+type StatNames = typeof P95 | typeof RATE | typeof COUNT
+
+function statNameFor(key: string): StatNames | null {
+  return key.startsWith(LATENCY_METRIC)
+    ? P95
+    : key.startsWith(ERROR_METRIC)
+    ? RATE
+    : key === CHECKS_METRIC
+    ? RATE
+    : key === CORRECTNESS_METRIC
+    ? COUNT
+    : null
+}
+
+function baselineNameFor(key: string): string | null {
+  return key.startsWith(LATENCY_METRIC)
+    ? 'p(95)'
+    : key.startsWith(ERROR_METRIC)
+    ? 'rate'
+    : key === CHECKS_METRIC
+    ? 'rate'
+    : key === CORRECTNESS_METRIC
+    ? 'count'
+    : null
+}
+
 function observedSnapshot(summary: unknown): Record<string, number> {
   const snapshot: Record<string, number> = {}
   for (const key of metricKeys(summary)) {
-    const names = key.startsWith(LATENCY_METRIC)
-      ? P95
-      : key.startsWith(ERROR_METRIC)
-      ? RATE
-      : key === CHECKS_METRIC
-      ? RATE
-      : key === CORRECTNESS_METRIC
-      ? COUNT
-      : null
+    const names = statNameFor(key)
     if (names === null) continue
     const value = stat(summary, key, names)
     if (value !== null) snapshot[`${key}.${names[0]}`] = value
@@ -232,7 +263,70 @@ function explainRegressions(explain: unknown): Regression[] {
   })
 }
 
+function detectInfraFailure(input: AnalyzeInput): InfraFailureReason | null {
+  if (!isRecord(input.summary) || !isRecord(input.summary['metrics'])) {
+    return {
+      signal: 'summary_absent' as const,
+      detail: 'k6 produced no summary — load test was skipped, did not execute, or the summary is unreadable',
+    }
+  }
+  const baseUrl = input.meta.baseUrl.trim()
+  if (baseUrl === '' || baseUrl === 'unknown') {
+    return {
+      signal: 'base_url_missing' as const,
+      detail:
+        'analyze step received no base URL — the k6 summary cannot be attributed to a known target, so HTTP-derived regressions are not trustworthy',
+    }
+  }
+  const errorRate = stat(input.summary, ERROR_METRIC, RATE)
+  const serverP95 = stat(input.summary, LATENCY_METRIC, P95)
+  if (errorRate !== null && errorRate >= 1 && serverP95 !== null && serverP95 < UNREACHABLE_SERVER_P95_FLOOR_MS) {
+    return {
+      signal: 'target_unreachable' as const,
+      detail:
+        '100% request failure with sub-millisecond p95 server processing time — responses were not produced; k6 records ~0ms wait time for reset/EOF connections (connection-level failure)',
+    }
+  }
+  return null
+}
+
+export function captureBaseline(summary: unknown, errorFloor: number): BaselineCapture {
+  const errorRate = stat(summary, ERROR_METRIC, RATE)
+  if (errorRate !== null && errorRate > errorFloor) {
+    return {
+      ok: false as const,
+      reason: `http_req_failed rate ${(errorRate * 100).toFixed(2)}% exceeds ${
+        (errorFloor * 100).toFixed(0)
+      }% capture floor`,
+    }
+  }
+  const serverP95 = stat(summary, LATENCY_METRIC, P95)
+  if (serverP95 !== null && serverP95 < UNREACHABLE_SERVER_P95_FLOOR_MS) {
+    return {
+      ok: false as const,
+      reason:
+        'server_processing_time p(95) is sub-millisecond — run looks infra-broken (reset/EOF connections record ~0ms wait), refusing to capture as baseline',
+    }
+  }
+  const baseline: Record<string, Record<string, number>> = {}
+  for (const key of metricKeys(summary)) {
+    const name = baselineNameFor(key)
+    const names = statNameFor(key)
+    if (name === null || names === null) continue
+    const value = stat(summary, key, names)
+    if (value !== null) {
+      const entry = baseline[key] ?? (baseline[key] = {})
+      entry[name] = value
+    }
+  }
+  if (Object.keys(baseline).length === 0) {
+    return { ok: false as const, reason: 'summary yielded no capturable metrics — refusing to write an empty baseline' }
+  }
+  return { ok: true as const, baseline }
+}
+
 export function analyzeRun(input: AnalyzeInput): PerfReport {
+  const infraFailure = detectInfraFailure(input)
   const regressions = [
     ...latencyRegressions(input),
     ...errorRateRegressions(input),
@@ -242,12 +336,19 @@ export function analyzeRun(input: AnalyzeInput): PerfReport {
   ]
 
   const hasBaseline = isRecord(input.baseline) && Object.keys(input.baseline).length > 0
-  const verdict: Verdict = regressions.length > 0 ? 'regressed' : hasBaseline ? 'pass' : 'no_baseline'
+  const verdict: Verdict = infraFailure !== null
+    ? 'infra_failure'
+    : regressions.length > 0
+    ? 'regressed'
+    : hasBaseline
+    ? 'pass'
+    : 'no_baseline'
 
   return {
     schemaVersion: SCHEMA_VERSION,
     run: input.meta,
     verdict,
+    infraFailure,
     signature: signatureOf(regressions),
     regressions,
     observed: observedSnapshot(input.summary),
