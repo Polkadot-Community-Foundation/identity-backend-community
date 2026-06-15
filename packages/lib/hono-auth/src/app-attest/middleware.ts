@@ -1,5 +1,4 @@
 import { ChallengeRejectedError, KeyId } from '@identity-backend/auth/services'
-import { toArrayBuffer } from '@std/streams'
 import { Context, Effect, Either, Runtime, Schema as S } from 'effect'
 import { createMiddleware } from 'hono/factory'
 import { AppAttestError, AppAttestMiddlewareError } from './types.js'
@@ -137,12 +136,11 @@ export const makeAppAttestMiddleware = Effect.gen(function*() {
 
       const decodedKeyId = decodeKeyIdResult.right
 
-      const bodyStream = c.req.raw.clone().body
-      if (!bodyStream) {
+      if (!c.req.raw.body) {
         return c.json({ error: 'Missing App Attest assertion body' }, 401)
       }
 
-      const bodyBytes = new Uint8Array(yield* Effect.promise(() => toArrayBuffer(bodyStream)))
+      const bodyBytes = yield* Effect.promise(() => c.req.bytes())
 
       const getAssertionResult = yield* getAssertion({
         keyId: decodedKeyId,

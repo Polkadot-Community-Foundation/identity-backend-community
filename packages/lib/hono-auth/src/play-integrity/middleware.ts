@@ -1,7 +1,6 @@
 import { ChallengeRejectedError } from '@identity-backend/auth/types'
 import type { playintegrity_v1 } from '@identity-backend/play-integrity'
 import { equals as bytesEquals } from '@std/bytes/equals'
-import { toArrayBuffer } from '@std/streams/to-array-buffer'
 import { Context, Effect, Either, pipe, Runtime, Schema as S } from 'effect'
 import { decodeBase64Url } from 'effect/Encoding'
 import { createMiddleware } from 'hono/factory'
@@ -134,9 +133,8 @@ export const makePlayIntegrityMiddleware = Effect.gen(function*() {
         return c.json(errorResponse, 401)
       }
 
-      const bodyStream = c.req.raw.clone().body
-      if (bodyStream) {
-        const bodyBytes = new Uint8Array(yield* Effect.promise(() => toArrayBuffer(bodyStream)))
+      if (c.req.raw.body) {
+        const bodyBytes = yield* Effect.promise(() => c.req.bytes())
         const expectedNonce = yield* buildClientDataHash({
           challenge: decodedChallenge,
           payload: bodyBytes,

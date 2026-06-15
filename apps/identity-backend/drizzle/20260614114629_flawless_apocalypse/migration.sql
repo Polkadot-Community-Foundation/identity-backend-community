@@ -1,0 +1,1 @@
+CREATE INDEX "individuality_username_search_key_idx" ON "polkadot_app"."individuality_usernames" ("network",(lower(coalesce("full_username", "username" || '.' || "digits"))) COLLATE "C");

@@ -137,11 +137,11 @@ describe('UsernameSearch', () => {
           expect(body.usernames.length, 'should find usernames regardless of case').toBeGreaterThan(0)
         }))
 
-      it.scoped('Should_OrderDigitsNumerically_When_SameUsername', () =>
+      it.scoped('Should_OrderByDisplayKey_When_SameUsername', () =>
         Effect.gen(function*() {
           yield* Effect.addFinalizer(() => cleanUp)
 
-          // --- @arrange: database with digits that would sort differently as strings vs numbers ---
+          // --- @arrange: database with digits that sort differently as strings vs numbers ---
           const db = yield* DB
 
           const records = [
@@ -156,14 +156,14 @@ describe('UsernameSearch', () => {
           // --- @act: Search for ordertest ---
           const res = yield* Effect.promise(() => client.search.$get({ header: {}, query: { prefix: 'ordertest' } }))
 
-          // --- @assert: Results ordered numerically (1, 2, 10) not lexicographically (1, 10, 2) ---
+          // --- @assert: results stream in display-key (byte) order; ordering is not a public contract ---
           checkResponse(res, 200)
           const body = yield* Effect.promise(() => res.json())
 
           expect(body.usernames.map((u: { username: string }) => u.username)).toEqual([
             'ordertest.1',
-            'ordertest.2',
             'ordertest.10',
+            'ordertest.2',
           ])
         }))
     })
@@ -437,7 +437,7 @@ describe('UsernameSearch', () => {
 
           const records = [
             ...generateUsernameDataArray(60, { username: 'defaultlimita', network: 'westend2' }, 0),
-            ...generateUsernameDataArray(60, { username: 'defaultlimitb', network: 'westend2' }, 100),
+            ...generateUsernameDataArray(60, { username: 'defaultlimitb', network: 'westend2' }, 40),
           ]
           yield* Effect.tryPromise(() => db.insert(schema.individualityUsernames).values(records))
 

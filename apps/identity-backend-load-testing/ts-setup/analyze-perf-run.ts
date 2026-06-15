@@ -26,7 +26,11 @@ const { values } = parseArgs({
 
 function readJson(path: string | undefined): unknown {
   if (!path || !existsSync(path)) return null
-  return JSON.parse(readFileSync(path, 'utf8'))
+  try {
+    return JSON.parse(readFileSync(path, 'utf8'))
+  } catch {
+    return null
+  }
 }
 
 function append(envVar: string, content: string): void {

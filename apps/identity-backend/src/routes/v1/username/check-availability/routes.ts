@@ -1,24 +1,12 @@
-import type { IndividualityUsernameService } from '#root/features/individuality/services/username-availability.service.js'
+import { MAXIMUM_USERNAME_ALLOCATION } from '#root/constants.js'
+import { DB } from '#root/db/drizzle.js'
 import { createOpenAPIHono, ProblemDetailWithErrorsZod, problemResponse } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
+import { checkUsernameAvailability } from '#root/routes/v1/username/username-prefix-match.store.js'
 import { BaseUsername } from '#root/schema/username.js'
 import { createRoute, z } from '@hono/zod-openapi'
 import { bridgeSpanContext } from '@identity-backend/observability'
-import {
-  Array,
-  Cause,
-  Context,
-  Effect,
-  Either,
-  Exit,
-  HashMap,
-  HashSet,
-  Layer,
-  Match,
-  pipe,
-  Runtime,
-  Schema as S,
-} from 'effect'
+import { Array, Cause, Effect, Either, Exit, HashMap, HashSet, Match, pipe, Runtime, Schema as S } from 'effect'
 import { computeAvailableDigits } from './compute-available-digits.js'
 import {
   CheckUsernameAvailabilityResponse,
@@ -28,20 +16,12 @@ import {
   CheckUsernameAvailabilityVersionQuery,
 } from './types.js'
 
-export class CheckAvailabilityRouteConfig
-  extends Context.Tag('CheckAvailabilityRouteConfig')<CheckAvailabilityRouteConfig, {
-    checkUsernamesAvailability: IndividualityUsernameService['checkAvailability']
-    getMaximumUsernameAllocation: () => number
-  }>()
-{}
-
 export const makeCheckAvailabilityRouteWithoutDependencies = () =>
   Effect.gen(function*() {
+    const db = yield* DB
     const runtime = yield* Effect.runtime()
-    const {
-      checkUsernamesAvailability,
-      getMaximumUsernameAllocation,
-    } = yield* CheckAvailabilityRouteConfig
+    const { PEOPLE_NETWORK } = yield* Effect.promise(() => import('#root/config.js'))
+    const network = yield* PEOPLE_NETWORK
 
     return createOpenAPIHono<{}>()
       .openapi(
@@ -101,8 +81,6 @@ export const makeCheckAvailabilityRouteWithoutDependencies = () =>
           const { version } = c.req.valid('query')
 
           const handler = Effect.gen(function*() {
-            const MAXIMUM_USERNAME_ALLOCATION = getMaximumUsernameAllocation()
-
             const [invalidUsernames, validUsernames] = yield* pipe(
               Array.map(usernames, (username) =>
                 S.decodeEither(BaseUsername)(username).pipe(Either.mapLeft(() => username))),
@@ -110,7 +88,8 @@ export const makeCheckAvailabilityRouteWithoutDependencies = () =>
               Effect.andThen(Array.partition(Either.isRight)),
             )
 
-            const [exhaustedUsernames, availableUsernames] = yield* checkUsernamesAvailability({
+            const [exhaustedUsernames, availableUsernames] = yield* checkUsernameAvailability({
+              network,
               usernames: HashSet.make(...Array.map(validUsernames, Either.getOrThrow)),
             }).pipe(
               Effect.map(HashMap.toEntries),
@@ -161,6 +140,7 @@ export const makeCheckAvailabilityRouteWithoutDependencies = () =>
           )
 
           const result = await bridgeSpanContext(handler, c).pipe(
+            Effect.provideService(DB, db),
             Effect.map((value) =>
               c.json(value, 200)
             ),
@@ -178,11 +158,4 @@ export const makeCheckAvailabilityRouteWithoutDependencies = () =>
       )
   })
 
-export const makeCheckAvailabilityRoute = () =>
-  makeCheckAvailabilityRouteWithoutDependencies().pipe(
-    Effect.provide(Layer.unwrapEffect(Effect.gen(function*() {
-      const { layerCheckAvailabilityRoutes } = yield* Effect.promise(() => import('./layer.js'))
-
-      return layerCheckAvailabilityRoutes
-    }))),
-  )
+export const makeCheckAvailabilityRoute = () => makeCheckAvailabilityRouteWithoutDependencies()

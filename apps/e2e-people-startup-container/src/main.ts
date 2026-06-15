@@ -4,7 +4,9 @@ import { layerWebSocketConstructor } from '@effect/platform-bun/BunSocket'
 import { pop_testnet } from '@identity-backend/descriptors'
 import { ss58Address } from '@polkadot-labs/hdkd-helpers'
 import { decodeHex } from '@std/encoding'
-import { Config, Duration, Effect, Layer } from 'effect'
+import { addDays } from 'date-fns/addDays'
+import { getUnixTime } from 'date-fns/getUnixTime'
+import { Clock, Config, Duration, Effect, Layer } from 'effect'
 
 type PolkadotPeopleNextDescriptors = typeof pop_testnet
 const polkadotPeopleNextDescriptor = pop_testnet
@@ -69,7 +71,7 @@ const program = Effect.gen(function*() {
   // Preseed Game storage so invitation-ticket E2E tests can sign_up_with_invite
   // without hitting NoGame (Custom error 143) in the GameAsInvited extension
   yield* Effect.log('Preseeding Game.Game storage...')
-  const gameFuture = Math.floor(Date.now() / 1000) + 86400
+  const gameFuture = getUnixTime(addDays(new Date(yield* Clock.currentTimeMillis), 1))
 
   yield* httpClient.execute(
     yield* HttpClientRequest.post(httpEndpoint).pipe(

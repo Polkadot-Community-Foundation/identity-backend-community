@@ -1,8 +1,6 @@
 import { DB, DBTest } from '#root/db/drizzle.js'
 import * as schema from '#root/db/schema.js'
-import { IndividualityUsernameService } from '#root/features/individuality/services/username-availability.service.js'
 import { createOpenAPIHono } from '#root/lib/problem-details.js'
-import { layerCheckAvailabilityRoutes } from '#root/routes/v1/username/check-availability/layer.js'
 import { makeCheckAvailabilityRouteWithoutDependencies } from '#root/routes/v1/username/check-availability/routes.js'
 import { it } from '@effect/vitest'
 import { checkResponse } from '@identity-backend/testing/hono'
@@ -16,9 +14,7 @@ describe('CheckAvailability Integration', () => {
   const NETWORK = 'westend2' as const
 
   const layer = pipe(
-    layerCheckAvailabilityRoutes,
-    Layer.provideMerge(IndividualityUsernameService.Default),
-    Layer.provideMerge(DBTest),
+    DBTest,
     Layer.provideMerge(Layer.setConfigProvider(ConfigProvider.fromJson({ PEOPLE_NETWORK: NETWORK }))),
   )
 

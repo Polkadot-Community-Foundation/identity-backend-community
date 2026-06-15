@@ -604,14 +604,18 @@ export const DB_IDLE_IN_TRANSACTION_TIMEOUT = pipe(
 // TODO: change default to 2 once all daemons are migrated to the leader-election pool
 export const LEADER_DB_POOL_MAX = pipe(
   Config.integer('LEADER_DB_POOL_MAX'),
-  Config.withDefault(50),
+  Config.withDefault(2),
   Config.mapOrFail(
     flow(
-      S.decodeEither(S.NonNegativeInt.pipe(S.annotations({ name: 'LEADER_DB_POOL_MAX' }))),
+      S.decodeEither(S.Int.pipe(S.between(2, 4), S.annotations({ name: 'LEADER_DB_POOL_MAX' }))),
       Either.mapLeft((err) => ConfigError.InvalidData([], err.message)),
     ),
   ),
-  Config.withDescription('Maximum number of connections in the leader election database pool'),
+  Config.withDescription(
+    'Max connections for the leader-election pool; bounded 2..4 so a mis-set value fails config decode at ' +
+      'startup. Two consumers need a connection — the advisory-lock holder and the reaper daemon — so the floor ' +
+      'is 2; the non-blocking lock means more buys nothing. See src/leader-election/AGENTS.md.',
+  ),
 )
 
 export const LEADER_DB_POOL_IDLE_TIMEOUT = pipe(
@@ -760,18 +764,24 @@ export const RATE_LIMIT_POD_DIVISOR = Config.integer('RATE_LIMIT_POD_DIVISOR').p
 )
 
 export const RATE_LIMIT_AUTH_ACTIONS = Config.integer('RATE_LIMIT_AUTH_ACTIONS').pipe(
-  positiveIntBudget(30),
-  Config.withDescription('Overall requests/minute (pre-divisor) for authenticated actions'),
+  positiveIntBudget(45),
+  Config.withDescription(
+    'Overall req/min (pre-divisor) for authenticated actions; derived peak×spike in infra/rate-limit-sizing.ts, tune to logs',
+  ),
 )
 
 export const RATE_LIMIT_REGISTRATION = Config.integer('RATE_LIMIT_REGISTRATION').pipe(
-  positiveIntBudget(5),
-  Config.withDescription('Overall requests/minute (pre-divisor) for registration'),
+  positiveIntBudget(6),
+  Config.withDescription(
+    'Overall req/min (pre-divisor) for registration; derived peak×spike in infra/rate-limit-sizing.ts, tune to logs',
+  ),
 )
 
 export const RATE_LIMIT_PUBLIC_READS = Config.integer('RATE_LIMIT_PUBLIC_READS').pipe(
-  positiveIntBudget(60),
-  Config.withDescription('Overall requests/minute (pre-divisor) for public reads (global profile)'),
+  positiveIntBudget(90),
+  Config.withDescription(
+    'Overall req/min (pre-divisor) for public reads, global profile; derived peak×spike in infra/rate-limit-sizing.ts, tune to logs',
+  ),
 )
 
 export const RATE_LIMIT_PROFILE = pipe(
@@ -786,17 +796,44 @@ export const RATE_LIMIT_PROFILE = pipe(
   ),
 )
 
-export const JWT_TTL_HOURS = pipe(
-  Config.number('JWT_TTL_HOURS'),
-  Config.withDefault(4),
-  Config.mapOrFail(
-    flow(
-      S.decodeEither(S.Number.pipe(S.positive(), S.finite(), S.annotations({ name: 'JWT_TTL_HOURS' }))),
-      Either.mapLeft((err) => ConfigError.InvalidData(['JWT_TTL_HOURS'], err.message)),
-    ),
+export const MAX_BODY_BYTES_HANDSHAKE = Config.integer('MAX_BODY_BYTES_HANDSHAKE').pipe(
+  positiveIntBudget(16 * 1024),
+  Config.withDescription(
+    'Maximum request body size in bytes for the unauthenticated handshake routes (/api/v1/auth/*) and the ' +
+      'push notify routes (/api/v1/notify/*). The Hono body-size gate rejects an over-cap body with a 413 ' +
+      'ProblemDetail before any handler — including attestation chain verification — runs. Tune up if a ' +
+      'vendor attestation format grows (observe app.body_size_rejections_total first).',
   ),
-  Config.map(Duration.hours),
-  Config.withDescription('Access-token TTL in hours'),
+)
+
+export const MAX_BODY_BYTES_DEFAULT = Config.integer('MAX_BODY_BYTES_DEFAULT').pipe(
+  positiveIntBudget(64 * 1024),
+  Config.withDescription(
+    'Catch-all maximum request body size in bytes for every route without a tighter per-family cap. ' +
+      'Enforced by the Hono body-size gate.',
+  ),
+)
+
+export const MAX_BODY_BYTES_SERVER = Config.integer('MAX_BODY_BYTES_SERVER').pipe(
+  positiveIntBudget(4 * 1024 * 1024),
+  Config.withDescription(
+    'Hard server-wide request-body ceiling in bytes passed to Bun.serve maxRequestBodySize. Last-resort ' +
+      'transport gate above the per-route Hono caps; rejects with a transport-layer 413 before the body ' +
+      'enters the JavaScript heap.',
+  ),
+)
+
+export const JWT_TTL = pipe(
+  Config.duration('JWT_TTL'),
+  Config.withDefault(Duration.minutes(15)),
+  Config.mapOrFail((ttl) =>
+    Duration.greaterThan(ttl, Duration.zero) && Duration.lessThanOrEqualTo(ttl, Duration.hours(24))
+      ? Either.right(ttl)
+      : Either.left(ConfigError.InvalidData(['JWT_TTL'], 'JWT_TTL must be > 0 and <= 24h'))
+  ),
+  Config.withDescription(
+    'Access-token TTL; ~15min per RFC 9700 (sensitive, stateless no-revocation so TTL is the revocation latency). Must be 0 < ttl <= 24h',
+  ),
 )
 
 export const POC_ENABLED = pipe(
@@ -809,14 +846,22 @@ export const POC_ENABLED = pipe(
 
 export const POC_DIFFICULTY_BITS = pipe(
   Config.integer('POC_DIFFICULTY_BITS'),
-  Config.withDefault(4),
+  Config.withDefault(16),
   Config.mapOrFail(
     flow(
       S.decodeEither(S.Int.pipe(S.between(1, 32), S.annotations({ name: 'POC_DIFFICULTY_BITS' }))),
       Either.mapLeft((err) => ConfigError.InvalidData([], err.message)),
     ),
   ),
-  Config.withDescription('Required leading zero bits of PoC work hash (1..32).'),
+  Config.withDescription(
+    'Required leading-zero BITS of the PoC work hash (1..32), counted with clz32 over the first 4 bytes of ' +
+      'sha256(sessionId ‖ timestamp ‖ counter). Expected solver cost is ~2^bits hashes, so each bit DOUBLES the ' +
+      'work — this is bits, not hex characters. 16 bits ≈ 65,536 iterations ≈ ~10ms on a desktop, the floor at ' +
+      'which the gate imposes real cost on a scripted DB-exhaustion attack while staying invisible to a human. ' +
+      'A default of 4 (≈16 iterations) is decorative and must not be used in production. Raise toward 18–20 ' +
+      '(~0.25–1M iterations) if on-site griefing of /usernames/search is observed; mobile clients hold a JWT and ' +
+      'never solve a puzzle, so the cost lands only on unauthenticated (Desktop / scripted) callers.',
+  ),
 )
 
 export const POC_SESSION_TTL = pipe(

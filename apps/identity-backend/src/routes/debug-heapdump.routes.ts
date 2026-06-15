@@ -4,7 +4,7 @@ import {
   DEBUG_PASSWORD,
   DEBUG_USERNAME,
 } from '#root/config.js'
-import { Config, Effect, Redacted } from 'effect'
+import { Clock, Config, Effect, Redacted, Runtime } from 'effect'
 import { Hono } from 'hono'
 import { basicAuth } from 'hono/basic-auth'
 import { stream } from 'hono/streaming'
@@ -25,6 +25,7 @@ const makeEnabledRoute = (
   auth: { username: string; password: string },
   cooldownMs: number,
   getHeapSnapshot: () => NodeJS.ReadableStream,
+  nowMillis: () => number,
 ) =>
   new Hono()
     .use(basicAuth(auth))
@@ -39,7 +40,7 @@ const makeEnabledRoute = (
         return c.json({ error: 'invalid label; allowed: [a-zA-Z0-9_-]{1,64}' }, 400)
       }
 
-      const now = Date.now()
+      const now = nowMillis()
       const sinceLast = now - lastCompletedAt
       if (sinceLast < cooldownMs) {
         const retryAfter = Math.ceil((cooldownMs - sinceLast) / 1000)
@@ -61,7 +62,7 @@ const makeEnabledRoute = (
           for await (const chunk of getHeapSnapshot()) {
             await s.write(chunk)
           }
-          lastCompletedAt = Date.now()
+          lastCompletedAt = nowMillis()
         } finally {
           inFlight = false
         }
@@ -79,9 +80,12 @@ export const makeDebugHeapdumpRoute = Effect.gen(function* makeDebugHeapdumpRout
     DEBUG_HEAPDUMP_COOLDOWN_SECONDS,
   ])
   const { getHeapSnapshot } = yield* Effect.promise(() => import('node:v8'))
+  const runtime = yield* Effect.runtime<never>()
+  const nowMillis = (): number => Runtime.runSync(runtime)(Clock.currentTimeMillis)
   return makeEnabledRoute(
     { username, password: Redacted.value(password) },
     cooldownSec * 1000,
     getHeapSnapshot,
+    nowMillis,
   )
 })

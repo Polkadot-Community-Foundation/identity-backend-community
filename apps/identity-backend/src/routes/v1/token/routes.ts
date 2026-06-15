@@ -322,10 +322,9 @@ export const makeTokenRouteWithoutDependencies = Effect.gen(function*() {
         },
       }),
       async (c) => {
-        const bodyText = await c.req.text()
+        const bodyBytes = new Uint8Array(await c.req.arrayBuffer())
         const headers = c.req.valid('header')
         const body = c.req.valid('json')
-        const bodyBytes = new TextEncoder().encode(bodyText)
 
         const handler = Effect.gen(function*() {
           const dispatch = yield* decideKeyAttestationDispatch({

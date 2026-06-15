@@ -105,6 +105,10 @@ ${explainSection(report.explain)}
 export function stepSummary(report: PerfReport): string {
   const verdictLine = report.verdict === 'regressed'
     ? `🔴 REGRESSED — ${report.regressions.length} regression(s), signature \`${report.signature}\``
+    : report.verdict === 'infra_failure'
+    ? `⛔ INFRA FAILURE — ${
+      report.infraFailure?.detail ?? 'run did not validly exercise the target'
+    }; no regression issue opened`
     : report.verdict === 'pass'
     ? '🟢 PASS — within baseline'
     : '🟡 NO BASELINE — recorded observed metrics only'

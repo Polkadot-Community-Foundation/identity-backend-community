@@ -43,9 +43,16 @@ const TokenSchema = Schema.Struct({ token: Schema.String })
 const TOO_MANY_REQUESTS = 429
 const MAX_BACKOFF_MS = 60_000
 const DEFAULT_BACKOFF_MS = 1_000
+const MAX_RETRIES_PER_TOKEN = 5
+const CIRCUIT_BREAKER_FAILURE_THRESHOLD = 10
+const CIRCUIT_BREAKER_COOLDOWN_MS = 30_000
 const PERCENT_GRANULARITY = 1
 const HEARTBEAT_MS = 30_000
 const MAX_DISTINCT_FAILURE_SAMPLES = 5
+
+function isRetryableStatus(status: number): boolean {
+  return status === TOO_MANY_REQUESTS || status === 500 || status === 502 || status === 503 || status === 504
+}
 
 function toBase64(bytes: Uint8Array): string {
   return Buffer.from(bytes).toString('base64')
@@ -53,10 +60,10 @@ function toBase64(bytes: Uint8Array): string {
 
 const acceptStatus = (status: number) => status === 200 || status === 201
 
-function retryAfterMs(error: HttpClientError | ParseResult.ParseError, nowMs: number): number | null {
+function retryDelayMs(error: HttpClientError | ParseResult.ParseError, nowMs: number): number | null {
   return Match.valueTags(error, {
     ResponseError: (e) => {
-      if (e.response.status !== TOO_MANY_REQUESTS) return null
+      if (!isRetryableStatus(e.response.status)) return null
       const raw = Option.getOrUndefined(headersGet(e.response.headers, 'retry-after'))
       if (raw === undefined || raw.length === 0) return DEFAULT_BACKOFF_MS
       const asNumber = Number(raw)
@@ -69,15 +76,15 @@ function retryAfterMs(error: HttpClientError | ParseResult.ParseError, nowMs: nu
       }
       return DEFAULT_BACKOFF_MS
     },
-    RequestError: () => null,
+    RequestError: () => DEFAULT_BACKOFF_MS,
     ParseError: () => null,
   })
 }
 
-function isTooManyRequests(error: HttpClientError | ParseResult.ParseError): boolean {
+function isRetryableError(error: HttpClientError | ParseResult.ParseError): boolean {
   return Match.valueTags(error, {
-    ResponseError: (e) => e.response.status === TOO_MANY_REQUESTS,
-    RequestError: () => false,
+    ResponseError: (e) => isRetryableStatus(e.response.status),
+    RequestError: () => true,
     ParseError: () => false,
   })
 }
@@ -91,7 +98,7 @@ const retryAfterSchedule = Schedule.makeWithState<
   undefined,
   (now, error, _state) =>
     Effect.sync(() => {
-      const delay = retryAfterMs(error, now)
+      const delay = retryDelayMs(error, now)
       if (delay === null) {
         return [undefined, Duration.zero, ScheduleDecision.done] as const
       }
@@ -104,6 +111,41 @@ const retryAfterSchedule = Schedule.makeWithState<
       ] as const
     }),
 )
+
+interface CircuitBreaker {
+  readonly protect: <A, E, R>(self: Effect.Effect<A, E, R>) => Effect.Effect<A, E, R>
+}
+
+function makeCircuitBreaker(failureThreshold: number, cooldownMs: number): Effect.Effect<CircuitBreaker, never, never> {
+  return Effect.gen(function*() {
+    const consecutiveFailuresRef = yield* Ref.make(0)
+    const openUntilRef = yield* Ref.make(0)
+
+    const protect: CircuitBreaker['protect'] = (self) =>
+      Effect.gen(function*() {
+        const nowMs = yield* Clock.currentTimeMillis
+        const openUntil = yield* Ref.get(openUntilRef)
+        if (nowMs < openUntil) {
+          yield* Effect.sleep(Duration.millis(openUntil - nowMs + 1))
+        }
+
+        return yield* self.pipe(
+          Effect.tap(() => Ref.set(consecutiveFailuresRef, 0)),
+          Effect.tapError(() =>
+            Effect.gen(function*() {
+              const failures = yield* Ref.updateAndGet(consecutiveFailuresRef, (n) => n + 1)
+              if (failures >= failureThreshold) {
+                const ms = yield* Clock.currentTimeMillis
+                yield* Ref.set(openUntilRef, ms + cooldownMs)
+              }
+            })
+          ),
+        )
+      })
+
+    return { protect }
+  })
+}
 
 function requestChallenge(
   client: HttpClient.HttpClient,
@@ -122,8 +164,9 @@ function acquireTokenWithBackoff(
   baseUrl: string,
   entry: RegisterEntry,
   retryCounter: Ref.Ref<number>,
+  breaker: CircuitBreaker,
 ): Effect.Effect<string, HttpClientError | ParseResult.ParseError, never> {
-  return Effect.gen(function*() {
+  const attempt = Effect.gen(function*() {
     const challenge = yield* requestChallenge(client, baseUrl)
     const { clientId, proof } = buildClientProof({
       mnemonic: entry.mnemonic,
@@ -145,12 +188,17 @@ function acquireTokenWithBackoff(
     return parsed.token
   }).pipe(
     Effect.tapError((error: HttpClientError | ParseResult.ParseError) =>
-      isTooManyRequests(error)
+      isRetryableError(error)
         ? Ref.update(retryCounter, (n) => n + 1)
         : Effect.void
     ),
-    Effect.retry(retryAfterSchedule),
+    Effect.retry({
+      schedule: Schedule.recurs(MAX_RETRIES_PER_TOKEN).pipe(Schedule.intersect(retryAfterSchedule)),
+      while: (error) => isRetryableError(error),
+    }),
   )
+
+  return breaker.protect(attempt)
 }
 
 function jsonEntry(entry: JwtToken): string {
@@ -222,6 +270,7 @@ export function makeJwtTokensHandler(
     const tokensRef = yield* Ref.make<ReadonlyArray<JwtToken>>([])
     const failureSamplesRef = yield* Ref.make<HashMap.HashMap<string, number>>(HashMap.empty())
     const distinctLoggedRef = yield* Ref.make(0)
+    const breaker = yield* makeCircuitBreaker(CIRCUIT_BREAKER_FAILURE_THRESHOLD, CIRCUIT_BREAKER_COOLDOWN_MS)
 
     const sampleFailure = (message: string): Effect.Effect<number, never, never> =>
       Ref.modify(failureSamplesRef, (map) => {
@@ -254,7 +303,7 @@ export function makeJwtTokensHandler(
       selected,
       (entry) =>
         Effect.gen(function*() {
-          const result = yield* Effect.either(acquireTokenWithBackoff(client, baseUrl, entry, retriesRef))
+          const result = yield* Effect.either(acquireTokenWithBackoff(client, baseUrl, entry, retriesRef, breaker))
           if (Either.isRight(result)) {
             const token: JwtToken = { who: entry.who, token: result.right }
             yield* writeEntry(token)

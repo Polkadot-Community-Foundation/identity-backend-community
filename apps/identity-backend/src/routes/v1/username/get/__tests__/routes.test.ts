@@ -429,6 +429,135 @@ describe('GetUsernamesV1 routes', () => {
           ).toEqual(['bob.99'])
         }))
 
+      it.effect('Should_ExcludeUsernames_When_DigitSuffixExceedsV1Bound', () =>
+        Effect.gen(function*() {
+          mockGetNetwork.mockReturnValue(Effect.succeed('polkadot'))
+
+          const db = yield* DB
+          yield* Effect.tryPromise(async () => {
+            await db
+              .delete(schema.individualityUsernames)
+              .execute()
+          })
+
+          const now = new Date('2024-01-01T00:00:00Z')
+          yield* Effect.tryPromise(async () => {
+            const records: (typeof schema.individualityUsernames.$inferInsert)[] = [
+              {
+                username: 'alice',
+                reservedUsername: null,
+                digits: '01',
+                network: 'polkadot',
+                candidateAccountId: 'alice-v1',
+                candidateSignature: '',
+                ringVrfKey: '',
+                proofOfOwnership: '',
+                consumerRegistrationSignature: '',
+                identifierKey: '',
+                status: 'ASSIGNED',
+                onchainData: null,
+                createdAt: now,
+                updatedAt: now,
+              },
+              {
+                username: 'alice',
+                reservedUsername: null,
+                digits: '123',
+                network: 'polkadot',
+                candidateAccountId: 'alice-chain-import',
+                candidateSignature: '',
+                ringVrfKey: '',
+                proofOfOwnership: '',
+                consumerRegistrationSignature: '',
+                identifierKey: '',
+                status: 'ASSIGNED',
+                onchainData: null,
+                createdAt: now,
+                updatedAt: now,
+              },
+            ]
+
+            for (const record of records) {
+              await db
+                .insert(schema.individualityUsernames)
+                .values(record)
+            }
+          })
+
+          const client = yield* makeClient
+
+          const res = yield* Effect.promise(() =>
+            client.index.$get({
+              query: {
+                prefix: 'alice',
+              },
+            })
+          )
+          checkResponse(res, 200)
+          const body = yield* Effect.promise(() => res.json())
+
+          expect(
+            body.map((item: { username: string }) => item.username),
+          ).toEqual(['alice.01'])
+        }))
+
+      it.effect('Should_NotExcludeFullUsernames_When_DigitsExceedV1Bound', () =>
+        Effect.gen(function*() {
+          mockGetNetwork.mockReturnValue(Effect.succeed('polkadot'))
+
+          const db = yield* DB
+          yield* Effect.tryPromise(async () => {
+            await db
+              .delete(schema.individualityUsernames)
+              .execute()
+          })
+
+          const now = new Date('2024-01-01T00:00:00Z')
+          yield* Effect.tryPromise(async () => {
+            const records: (typeof schema.individualityUsernames.$inferInsert)[] = [
+              {
+                username: 'alice',
+                fullUsername: 'alice_smith',
+                reservedUsername: null,
+                digits: '123',
+                network: 'polkadot',
+                candidateAccountId: 'alice-smith-chain',
+                candidateSignature: '',
+                ringVrfKey: '',
+                proofOfOwnership: '',
+                consumerRegistrationSignature: '',
+                identifierKey: '',
+                status: 'ASSIGNED',
+                onchainData: null,
+                createdAt: now,
+                updatedAt: now,
+              },
+            ]
+
+            for (const record of records) {
+              await db
+                .insert(schema.individualityUsernames)
+                .values(record)
+            }
+          })
+
+          const client = yield* makeClient
+
+          const res = yield* Effect.promise(() =>
+            client.index.$get({
+              query: {
+                prefix: 'alice',
+              },
+            })
+          )
+          checkResponse(res, 200)
+          const body = yield* Effect.promise(() => res.json())
+
+          expect(
+            body.map((item: { username: string }) => item.username),
+          ).toEqual(['alice_smith'])
+        }))
+
       it.effect('Should_MatchAndRenderFullUsername_When_PrefixMatchesFullColumn', () =>
         Effect.gen(function*() {
           mockGetNetwork.mockReturnValue(Effect.succeed('polkadot'))

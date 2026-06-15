@@ -13,6 +13,7 @@ import { dampTestNaming } from './rules/damp-test-naming.js'
 import { noBarrels } from './rules/no-barrels.js'
 import { noBodylessStatusAssertion } from './rules/no-bodyless-status-assertion.js'
 import { noContextGenericTag } from './rules/no-context-generic-tag.js'
+import { noDateNowInEffect } from './rules/no-date-now-in-effect.js'
 import { noDirectTagAccess } from './rules/no-direct-tag-access.js'
 import { noEitherTagAssertions } from './rules/no-either-tag-assertions.js'
 import { noInlineDestructuredType } from './rules/no-inline-destructured-type.js'
@@ -45,6 +46,7 @@ export default {
     'no-barrels': noBarrels,
     'no-bodyless-status-assertion': noBodylessStatusAssertion,
     'no-context-generic-tag': noContextGenericTag,
+    'no-date-now-in-effect': noDateNowInEffect,
     'no-inline-destructured-type': noInlineDestructuredType,
     'no-io-boundary-tests': noIoBoundaryTests,
     'no-logging-in-catch': noLoggingInCatch,

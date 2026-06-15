@@ -34,6 +34,7 @@ export const makeListUsernamesRouteWithoutDependencies = Effect.gen(function*() 
     .openapi(
       createRoute({
         summary: 'Get Usernames',
+        deprecated: true,
         method: 'get',
         path: '/',
         tags: ['v1'],
@@ -66,7 +67,8 @@ export const makeListUsernamesRouteWithoutDependencies = Effect.gen(function*() 
                 schema: z.array(makeUsernameDTO()),
               },
             },
-            description: 'List of usernames, optionally filtered by prefix',
+            description:
+              'DEPRECATED: List of usernames, optionally filtered by prefix. Use GET /api/v1/usernames/search instead.',
           },
           400: { ...problemResponse(ProblemDetailWithErrorsZod), description: 'Bad Request' },
           429: {
@@ -135,6 +137,10 @@ export const makeListUsernamesRouteWithoutDependencies = Effect.gen(function*() 
         }).pipe(
           Effect.withSpan('v1.list_usernames'),
         )
+
+        c.header('Deprecation', 'true')
+        c.header('Sunset', 'Mon, 22 Jun 2026 00:00:00 GMT')
+        c.header('Link', '</api/v1/usernames/search>; rel="alternate"; title="Search Usernames"')
 
         const result = await bridgeSpanContext(handler, c).pipe(
           Effect.map((value) => c.json(value, 200)),

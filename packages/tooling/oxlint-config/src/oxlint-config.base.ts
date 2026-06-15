@@ -27,6 +27,7 @@ export default defineConfig({
     '@identity-backend/oxlint-plugin/ban-error-string': 'error',
     '@identity-backend/oxlint-plugin/no-manual-tag-property': 'error',
     '@identity-backend/oxlint-plugin/no-context-generic-tag': 'error',
+    '@identity-backend/oxlint-plugin/no-date-now-in-effect': 'error',
     '@identity-backend/oxlint-plugin/no-direct-tag-access': 'error',
     '@identity-backend/oxlint-plugin/no-either-tag-assertions': 'error',
     '@identity-backend/oxlint-plugin/no-io-boundary-tests': 'error',

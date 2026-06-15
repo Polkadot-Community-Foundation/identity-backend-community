@@ -117,19 +117,19 @@ export const makeAuthRoutesWithoutDependencies = (options: AuthRoutes.Options = 
               content: {
                 'application/json': {
                   schema: z.object({
-                    keyId: z.base64()
+                    keyId: z.base64().max(128)
                       .transform(decodeBase64)
                       .openapi({
                         description: 'The base64-encoded key identifier for the attestation.',
                         examples: ['s/134MbeEEZDZKCvOTf+jZgNhpoDwdXZ8cKfTym8FUg='],
                       }),
-                    challenge: z.base64()
+                    challenge: z.base64().max(512)
                       .transform(decodeBase64)
                       .openapi({
                         description: 'The base64-encoded challenge used in the attestation process.',
                         examples: ['NmY0NmFhZWItMzk4OS00NWRiLThjMjQtNmNjODhhNzZlNzg5'],
                       }),
-                    attestation: z.base64()
+                    attestation: z.base64().max(8192)
                       .transform(decodeBase64)
                       .openapi({
                         description: 'The base64-encoded attestation statement from Apple.',

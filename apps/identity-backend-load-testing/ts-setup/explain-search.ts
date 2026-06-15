@@ -31,15 +31,18 @@ function isRecord(value: unknown): value is Record<string, unknown> {
 
 const SEARCH_SQL = `SELECT * FROM polkadot_app.individuality_usernames
     WHERE network = $1
-      AND (
-        (full_username IS NULL AND username || '.' || digits ILIKE $2)
-        OR (full_username IS NOT NULL AND full_username ILIKE $2)
-      )
-    ORDER BY username ASC, digits::integer ASC
-    LIMIT $3`
+      AND (lower(coalesce(full_username, username || '.' || digits))) COLLATE "C" >= $2
+      AND (lower(coalesce(full_username, username || '.' || digits))) COLLATE "C" < $3
+    ORDER BY (lower(coalesce(full_username, username || '.' || digits))) COLLATE "C", username ASC, digits::integer ASC
+    LIMIT $4`
 
-function searchParams(prefix: string): [string, string, number] {
-  return [NETWORK, `${prefix}%`, LIMIT]
+function nextPrefixBound(lowered: string): string {
+  return lowered.slice(0, -1) + String.fromCharCode(lowered.charCodeAt(lowered.length - 1) + 1)
+}
+
+function searchParams(prefix: string): [string, string, string, number] {
+  const lower = prefix.toLowerCase()
+  return [NETWORK, lower, nextPrefixBound(lower), LIMIT]
 }
 
 function walkPlan(node: unknown, onNode: (n: Record<string, unknown>) => void): void {

@@ -40,6 +40,7 @@
     "@identity-backend/backend-cli": "workspace:^",
     "@identity-backend/oxlint-config": "workspace:^",
     "@identity-backend/oxlint-plugin": "workspace:^",
+    "@identity-backend/rate-limit-sizing": "workspace:^",
     "@semantic-release/commit-analyzer": "catalog:",
     "@semantic-release/git": "catalog:",
     "@semantic-release/github": "catalog:",

@@ -8,6 +8,22 @@ const PROFILES = { 'shared-nat': 'shared-nat', global: 'global' } as const
 const plan = PLANS[(process.env.CLOUDFLARE_PLAN ?? '') as keyof typeof PLANS] ?? 'pro'
 const profile = PROFILES[(process.env.RATE_LIMIT_PROFILE ?? '') as keyof typeof PROFILES] ?? 'shared-nat'
 
+const parsePositiveInt = (raw: string | undefined, fallback: number, name: string): number => {
+  if (raw === undefined || raw === '') return fallback
+  const n = Number(raw)
+  if (!Number.isInteger(n) || n <= 0) {
+    throw new Error(`${name} must be a positive integer; got: ${JSON.stringify(raw)}`)
+  }
+  return n
+}
+
+const sharedNatCidrs = (process.env.SHARED_NAT_CIDRS ?? '')
+  .split(/[\s,]+/)
+  .map((entry) => entry.trim())
+  .filter((entry) => entry.length > 0)
+const sharedNatPopulation = parsePositiveInt(process.env.SHARED_NAT_POPULATION, 1000, 'SHARED_NAT_POPULATION')
+const edgePods = parsePositiveInt(process.env.RATE_LIMIT_POD_DIVISOR, 2, 'RATE_LIMIT_POD_DIVISOR')
+
 const PEOPLE_NETWORK_FALLBACK = 'westend2' as const
 
 // Placeholders for the SST deployment-config keys the app's `Config` reads.
@@ -209,6 +225,7 @@ export default $config({
       cluster,
       database,
       profile,
+      pods: edgePods,
       deploymentConfig: appDeploymentConfig(),
       otlpHttpEndpoint: observability.otlpHttpEndpoint,
       hostname: apiHostname,
@@ -224,7 +241,7 @@ export default $config({
         ttl: 1,
       })
 
-      applyEdgePolicy({ zoneId, plan, profile })
+      applyEdgePolicy({ zoneId, plan, profile, sharedNatCidrs, population: sharedNatPopulation, pods: edgePods })
     }
 
     return {
