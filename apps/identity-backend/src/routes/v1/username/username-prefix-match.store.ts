@@ -3,7 +3,7 @@ import { DB, schema } from '#root/db/mod.js'
 import { classifySearchPrefix } from '#root/routes/v1/username/username-prefix-match.js'
 import { BaseUsername, UsernameDigits } from '#root/schema/mod.js'
 import { and, asc, eq, getTableColumns, inArray, type SQL, sql } from 'drizzle-orm'
-import { Array, Effect, HashMap, HashSet, Match, Option, Schema as S } from 'effect'
+import { Array, Effect, HashMap, HashSet, Option, Schema as S } from 'effect'
 
 type Network = 'westend2' | 'paseo' | 'polkadot'
 type UsernameStatus = 'ASSIGNED' | 'RESERVED' | 'FAILED'
@@ -16,32 +16,10 @@ export interface SearchCursor {
 
 export interface SearchUsernamesParams {
   readonly network: Network
-  readonly prefix: string
+  readonly prefix: string | undefined
+  readonly status?: UsernameStatus | undefined
   readonly cursor: SearchCursor | null
   readonly limit: number
-}
-
-export interface ListUsernamesParams {
-  readonly network: Network
-  readonly prefix: string | undefined
-  readonly status: UsernameStatus | undefined
-  readonly limit: number
-}
-
-const buildUsernamePrefixCondition = (prefix: string): SQL => {
-  const searchPattern = `${prefix}%`
-
-  const liteCondition =
-    sql`(${schema.individualityUsernames.fullUsername} IS NULL AND ${schema.individualityUsernames.username} || '.' || ${schema.individualityUsernames.digits} ILIKE ${searchPattern})`
-
-  const fullCondition =
-    sql`(${schema.individualityUsernames.fullUsername} IS NOT NULL AND ${schema.individualityUsernames.fullUsername} ILIKE ${searchPattern})`
-
-  return Match.value(classifySearchPrefix(prefix)).pipe(
-    Match.when('LiteOnly', () => liteCondition),
-    Match.when('LiteAndFull', () => sql`(${liteCondition} OR ${fullCondition})`),
-    Match.exhaustive,
-  )
 }
 
 const searchDisplayKey: SQL =
@@ -61,18 +39,34 @@ const nextPrefixBound = (lowered: string): string =>
   lowered.slice(0, -1) + String.fromCharCode(lowered.charCodeAt(lowered.length - 1) + 1)
 
 export const searchUsernames = Effect.fn('username_prefix_match.store.search')(
-  function*({ network, prefix, cursor, limit }: SearchUsernamesParams) {
+  function*({ network, prefix, status, cursor, limit }: SearchUsernamesParams) {
     const db = yield* DB
-    const lowerBound = prefix.toLowerCase()
-    const upperBound = nextPrefixBound(lowerBound)
 
-    const liteOnly = classifySearchPrefix(prefix) === 'LiteOnly'
-      ? sql`${schema.individualityUsernames.fullUsername} IS NULL`
-      : undefined
+    const conditions: (SQL | undefined)[] = [
+      eq(schema.individualityUsernames.network, network),
+      v1DigitsLengthBound,
+    ]
 
-    const afterCursor = cursor
-      ? sql`(${searchDisplayKey} > ${cursor.key} OR (${searchDisplayKey} = ${cursor.key} AND (${schema.individualityUsernames.username} > ${cursor.username} OR (${schema.individualityUsernames.username} = ${cursor.username} AND ${schema.individualityUsernames.digits}::integer > ${cursor.digits}))))`
-      : undefined
+    if (prefix) {
+      const lowerBound = prefix.toLowerCase()
+      conditions.push(
+        sql`${searchDisplayKey} >= ${lowerBound}`,
+        sql`${searchDisplayKey} < ${nextPrefixBound(lowerBound)}`,
+      )
+      if (classifySearchPrefix(prefix) === 'LiteOnly') {
+        conditions.push(sql`${schema.individualityUsernames.fullUsername} IS NULL`)
+      }
+    }
+
+    if (status) {
+      conditions.push(eq(schema.individualityUsernames.status, status))
+    }
+
+    if (cursor) {
+      conditions.push(
+        sql`(${searchDisplayKey} > ${cursor.key} OR (${searchDisplayKey} = ${cursor.key} AND (${schema.individualityUsernames.username} > ${cursor.username} OR (${schema.individualityUsernames.username} = ${cursor.username} AND ${schema.individualityUsernames.digits}::integer > ${cursor.digits}))))`,
+      )
+    }
 
     return yield* Effect.tryPromise(() =>
       db
@@ -81,50 +75,13 @@ export const searchUsernames = Effect.fn('username_prefix_match.store.search')(
           searchKey: sql<string>`${searchDisplayKey}`.as('search_key'),
         })
         .from(schema.individualityUsernames)
-        .where(and(
-          eq(schema.individualityUsernames.network, network),
-          sql`${searchDisplayKey} >= ${lowerBound}`,
-          sql`${searchDisplayKey} < ${upperBound}`,
-          v1DigitsLengthBound,
-          liteOnly,
-          afterCursor,
-        ))
+        .where(and(...conditions))
         .orderBy(
           searchDisplayKey,
           asc(schema.individualityUsernames.username),
           sql`${schema.individualityUsernames.digits}::integer`,
         )
         .limit(limit + 1)
-    )
-  },
-)
-
-export const listUsernames = Effect.fn('username_prefix_match.store.list')(
-  function*({ network, prefix, status, limit }: ListUsernamesParams) {
-    const db = yield* DB
-
-    return yield* Effect.tryPromise(() =>
-      db
-        .select()
-        .from(schema.individualityUsernames)
-        .where(() => {
-          const conditions: SQL[] = [
-            eq(schema.individualityUsernames.network, network),
-            v1DigitsLengthBound,
-          ]
-          if (prefix) {
-            conditions.push(buildUsernamePrefixCondition(prefix))
-          }
-          if (status) {
-            conditions.push(eq(schema.individualityUsernames.status, status))
-          }
-          return and(...conditions)
-        })
-        .orderBy(
-          asc(schema.individualityUsernames.username),
-          asc(schema.individualityUsernames.digits),
-        )
-        .limit(limit)
     )
   },
 )

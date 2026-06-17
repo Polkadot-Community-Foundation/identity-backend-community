@@ -3,7 +3,7 @@ import { SelectIndividualityUsernameSchema } from '#root/db/individuality.adapte
 import { DefectReporter } from '#root/infrastructure/observability/mod.js'
 import { createOpenAPIHono, ProblemDetailWithErrorsZod, problemResponse } from '#root/lib/problem-details.js'
 import { withRouteTimeout } from '#root/lib/route-timeout.js'
-import { listUsernames } from '#root/routes/v1/username/username-prefix-match.store.js'
+import { searchUsernames } from '#root/routes/v1/username/username-prefix-match.store.js'
 import type { HttpBindings } from '@hono/node-server'
 import { createRoute, z } from '@hono/zod-openapi'
 import { bridgeSpanContext } from '@identity-backend/observability'
@@ -94,13 +94,22 @@ export const makeListUsernamesRouteWithoutDependencies = Effect.gen(function*() 
       async (c) => {
         const { prefix, status } = c.req.valid('query')
 
+        c.header('Deprecation', 'true')
+        c.header('Sunset', 'Mon, 22 Jun 2026 00:00:00 GMT')
+        c.header('Link', '</api/v1/usernames/search>; rel="alternate"; title="Search Usernames"')
+
+        if (!prefix) {
+          return c.json([], 200)
+        }
+
         const handler = Effect.gen(function*() {
-          const rows = yield* listUsernames({
+          const rows = (yield* searchUsernames({
             network: config.network,
             prefix,
             status,
+            cursor: null,
             limit: MAX_USERNAMES_LIMIT,
-          })
+          })).slice(0, MAX_USERNAMES_LIMIT)
 
           const [corruptRows, items] = Array.separate(
             rows.map((row) => S.decodeUnknownEither(SelectIndividualityUsernameSchema)(row)),
@@ -137,10 +146,6 @@ export const makeListUsernamesRouteWithoutDependencies = Effect.gen(function*() 
         }).pipe(
           Effect.withSpan('v1.list_usernames'),
         )
-
-        c.header('Deprecation', 'true')
-        c.header('Sunset', 'Mon, 22 Jun 2026 00:00:00 GMT')
-        c.header('Link', '</api/v1/usernames/search>; rel="alternate"; title="Search Usernames"')
 
         const result = await bridgeSpanContext(handler, c).pipe(
           Effect.map((value) => c.json(value, 200)),
