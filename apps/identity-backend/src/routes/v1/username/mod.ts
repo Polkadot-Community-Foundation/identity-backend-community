@@ -1,6 +1,6 @@
 import { createOpenAPIHono } from '#root/lib/problem-details.js'
 import { Effect } from 'effect'
-import type { MiddlewareHandler } from 'hono'
+import type { Context, MiddlewareHandler } from 'hono'
 import { except } from 'hono/combine'
 import { cors } from 'hono/cors'
 import { etag } from 'hono/etag'
@@ -8,6 +8,8 @@ import { makeCheckAvailabilityRoute } from './check-availability/routes.js'
 import { makeGetUsernameRoute, makeListUsernamesRoute } from './get/mod.js'
 import { makeRegisterUsernameRoute } from './register/mod.js'
 import { makeSearchUsernamesRoute } from './search/username-search.routes.js'
+
+const isPublicCollectionRead = (c: Context): boolean => c.req.method === 'GET'
 
 export const makeUsernamesRoute = Effect.fn('v1.make_usernames_route')(function*(
   authMiddleware: MiddlewareHandler,
@@ -21,24 +23,10 @@ export const makeUsernamesRoute = Effect.fn('v1.make_usernames_route')(function*
 
   return createOpenAPIHono()
     .use('/', cors(), etag({ weak: true }))
-    .use(
-      '/',
-      except(
-        (c) => c.req.path.startsWith('/search'),
-        authMiddleware,
-      ),
-    )
-    .use(
-      '/',
-      except(
-        (c) => c.req.path.startsWith('/search'),
-        rateLimit.authActions,
-      ),
-    )
-    .use(
-      '/search',
-      rateLimit.search,
-    )
+    .use('/', except(isPublicCollectionRead, authMiddleware))
+    .use('/', except(isPublicCollectionRead, rateLimit.authActions))
+    .use('/', except((c) => !isPublicCollectionRead(c), rateLimit.search))
+    .use('/search', rateLimit.search)
     .route('/available', checkAvailability)
     .route('/', register)
     .route('/', search)

@@ -46,6 +46,9 @@ This document guides operators through obtaining every secret and configuration 
 
 ### `DEVICE_CHECK_KEY_ID` and `DEVICE_CHECK_PRIVATE_KEY`
 
+> **⚠️ EXPERIMENTAL — `DEVICE_CHECK_IOS_ENABLED` must be `false` in production.**
+> See [`production-checklist.md § 5.2`](../production-checklist.md#52-must-be-off-false-for-production).
+
 **What it is:** Key ID (e.g., `A1B2C3D4E5`) and the corresponding ECDSA P-256 private key used to call the DeviceCheck API.
 
 **Where to get it:**

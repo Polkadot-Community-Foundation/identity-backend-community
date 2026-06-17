@@ -656,7 +656,8 @@ ANDROID_PACKAGE_NAMES=["io.example.app"]
 ANDROID_SIGNING_DIGEST_PLAYSTORE=<64-hex-lowercase>
 ANDROID_SIGNING_DIGEST_WEBSITE=<64-hex-lowercase>
 APPLE_TEAM_ID=<10-char>
-DEVICE_CHECK_KEY_ID=<10-char>
+# DEVICE_CHECK_KEY_ID — EXPERIMENTAL, do not enable in production. See production-checklist.md § 5.2
+# DEVICE_CHECK_KEY_ID=<10-char>
 APN_KEY_ID=<10-char>
 APN_TEAM_ID=<10-char>
 TURN_REALM=turn.example.com
@@ -1467,6 +1468,58 @@ present but the platform attestation claim
 failing. Check the OTel span for the auth route to
 see which tag fired.
 
+## Step 10.5 — Provision voucher secrets
+
+If the deployment serves clients that authenticate via **voucher**
+(`Auth-Attestation-Type: voucher`), you must pre-provision voucher
+secrets before the first voucher-redeeming client connects. Vouchers
+enable out-of-band enrollment without platform attestation — a
+real-world voucher is a printed QR code handed to a user.
+
+The provisioning script generates `N` random 32-byte secrets, inserts
+their SHA-256 hashes into the `voucher_secrets` table, and writes QR
+PNGs + a manifest CSV to a local directory:
+
+```bash
+# From the repo root
+DATABASE_URL="postgres://..." pnpm --filter identity-backend-container provision:vouchers \
+  --count 100 \
+  --output-dir ./vouchers
+```
+
+### Output
+
+| File                              | Purpose                                  |
+| :-------------------------------- | :--------------------------------------- |
+| `vouchers/voucher_00.png`         | QR-encoded deep link (`polkadotapp://`)  |
+| `vouchers/voucher_01.png`         | ...one per voucher                       |
+| `vouchers/manifest.csv`           | `index,secret_hash` — the audit log      |
+| `voucher_secrets` DB table        | hash rows — the server-side state        |
+
+**The QR PNGs are the single point of delivery.** The plaintext secret
+appears in the QR and nowhere else after the script exits. The
+database stores only the hash. Lost QRs cannot be recovered — mint
+replacements by re-running the script (old hashes remain unused).
+
+### Requirements
+
+- `DATABASE_URL` must point at a database that has had migrations
+  applied (the `voucher_secrets` table must exist).
+- The `--output-dir` is created if it does not exist.
+- Each run generates fresh random secrets; the script does not
+  deduplicate against the existing table (SHA-256 collision is not a
+  concern at these volumes).
+
+### ⚠️ STUCK POINT — "The QR links to `polkadotapp://` but my app uses a different scheme"
+
+The deep-link scheme is hard-coded in
+`scripts/provision-voucher-secrets.ts:27` as `polkadotapp://invitation`.
+If your client registers a different URL scheme, edit the
+`VOUCHER_DEEP_LINK_BASE` constant before running. The QR encodes the
+full URL; the server never sees it — only the base64 secret matters.
+
+---
+
 ## Step 11 — Pre-promotion checklist (expanded)
 
 The original Step 9 checklist verifies "is it up."
@@ -1514,6 +1567,11 @@ This expanded list verifies "is it **right**":
       pushed image with tag matching
       `sst-<commit-sha>` (proves the local Docker
       build + push path works end-to-end).
+- [ ] If the stage serves voucher-authenticated clients:
+      voucher secrets are provisioned (run
+      `pnpm --filter identity-backend-container provision:vouchers
+      --count <N>` against the stage's database and confirm
+      the `voucher_secrets` table has `<N>` rows).
 - [ ] The LGTM Grafana URL loads (the `grafana: <url>`
       output of `pnpm sst deploy`) and the Identity
       Backend API dashboard renders without errors.
@@ -1546,6 +1604,10 @@ dig api.example.com @1.1.1.1
 curl -H "Authorization: Bearer <CF_TOKEN>" "https://api.cloudflare.com/client/v4/zones"
 
 # Polkadot
+# Voucher provisioning
+DATABASE_URL="postgres://..." pnpm --filter identity-backend-container provision:vouchers \
+  --count 100 --output-dir ./vouchers
+
 # Polkadot.js Apps: https://polkadot.js.org/apps/?rpc=wss%3A%2F%2Fpeople-paseo.dotters.network
 # Or via the chain's RPC directly with curl + JSON-RPC
 
@@ -1596,3 +1658,4 @@ something is wrong."
 | 40 | RDS `IAM role ARN value is invalid` (Enhanced Monitoring) | 7.3 (deploy)       | 5 min (diagnose) |
 | 41 | No Cloudflare zone — can I use the ALB URL?               | 7.0 (URL strategy) | 0 min (decision) |
 | 42 | ALB URL prints but `curl` hangs                           | 8 (verify)         | 5 min (diagnose) |
+| 43 | QR deep-link scheme is wrong for my app                   | 10.5               | 1 min (edit const)|

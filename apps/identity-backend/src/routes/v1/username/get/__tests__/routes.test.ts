@@ -253,7 +253,7 @@ describe('GetUsernamesV1 routes', () => {
       })
 
     it.layer(layer)((it) => {
-      it.effect('Should_ReturnUsernames_When_ConfiguredNetworkMatches', () =>
+      it.effect('Should_ReturnEmpty_When_PrefixOmitted', () =>
         Effect.gen(function*() {
           mockGetNetwork.mockReturnValue(Effect.succeed('polkadot'))
 
@@ -292,45 +292,7 @@ describe('GetUsernamesV1 routes', () => {
           checkResponse(res, 200)
           const body = yield* Effect.promise(() => res.json())
 
-          expect(body).toEqual([
-            {
-              candidateAccountId: 'alice-account',
-              username: 'alice.00',
-              status: 'ASSIGNED',
-              onchainData: {
-                blockHash: '0xaaa',
-                blockNumber: 1,
-                blockIndex: 2,
-                eventIndex: 3,
-              },
-              createdAt: '2024-01-01T00:00:00.000Z',
-              updatedAt: '2024-01-01T00:00:00.000Z',
-            },
-            {
-              candidateAccountId: 'alice-failed',
-              username: 'alice.01',
-              status: 'FAILED',
-              onchainData: null,
-              createdAt: '2024-01-01T00:00:00.000Z',
-              updatedAt: null,
-            },
-            {
-              candidateAccountId: 'bob-reserved',
-              username: 'bob.00',
-              status: 'RESERVED',
-              onchainData: null,
-              createdAt: '2024-01-01T00:00:00.000Z',
-              updatedAt: '2024-01-01T00:00:00.000Z',
-            },
-            {
-              candidateAccountId: 'bob-other',
-              username: 'bob.99',
-              status: 'RESERVED',
-              onchainData: null,
-              createdAt: '2024-01-01T00:00:00.000Z',
-              updatedAt: '2024-01-01T00:00:00.000Z',
-            },
-          ])
+          expect(body).toEqual([])
         }))
 
       it.effect('Should_SupportPrefixAndStatusFilters_When_FilteringUsernames', () =>
@@ -367,6 +329,7 @@ describe('GetUsernamesV1 routes', () => {
           const statusAssignedRes = yield* Effect.promise(() =>
             client.index.$get({
               query: {
+                prefix: 'ali',
                 status: 'ASSIGNED',
               },
             })
@@ -383,6 +346,7 @@ describe('GetUsernamesV1 routes', () => {
           const statusFailedRes = yield* Effect.promise(() =>
             client.index.$get({
               query: {
+                prefix: 'ali',
                 status: 'FAILED',
               },
             })
