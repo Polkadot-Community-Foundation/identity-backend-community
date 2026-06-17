@@ -60,7 +60,7 @@ succeeds.** The layers, in order of the request lifecycle:
 | 1 | **`AUTH_ENABLED`**          | `AUTH_ENABLED=true`                                                                                                                      | Auth plugin is even mounted; without it the request short-circuits past attestation                                                                       | Every request bypasses attestation; the system is an open relay                                                                                                                                                                                                        |
 | 2 | **`ENFORCE_AUTH`**          | `ENFORCE_AUTH=true`                                                                                                                      | Soft gate is closed; `Auth-Attestation` header is **required** and **verified** on every request                                                          | iOS sends App Attest, but the server accepts ANY base64-shaped blob as a valid assertion                                                                                                                                                                               |
 | 3 | **App Attest allowlist**    | `APPLE_APP_ATTEST_APP_IDS=[…]`                                                                                                           | Only attested bundle IDs (e.g. `com.example.app`) are accepted; spoofed bundle IDs are rejected                                                           | Attacker registers a fake App ID and gets an attestation object accepted for it                                                                                                                                                                                        |
-| 4 | **iOS DeviceCheck**         | `DEVICE_CHECK_IOS_ENABLED=true` (and `ENFORCE_AUTH=true`)                                                                                | The 2-bit per-device state on Apple's servers — a single physical device can register one username, then must pay to clear                                | An attacker with a fleet of jailbroken iPhones can register one username per device, jailbreak-clear the DC state, register again, repeat. Each device is cheap; the fleet is not.                                                                                     |
+| 4 | **iOS DeviceCheck**         | `DEVICE_CHECK_IOS_ENABLED=false`                                                                                                          | **[EXPERIMENTAL — do not enable in production.]** The Apple DeviceCheck SDK, server-side enforcement, and two-bit state management are not production-hardened. When off, every iOS device is treated as clean. | See § 5.2. The DC layer is an experimental prototype — no production guarantees.                                                                                                                       |
 | 5 | **Android key attestation** | `ANDROID_PACKAGE_NAMES=[…]`, `ANDROID_SIGNING_DIGEST_PLAYSTORE=…`, `ANDROID_SIGNING_DIGEST_WEBSITE=…`, `ANDROID_ATTESTATION_ROOT_PEMS=…` | The Android device's hardware-backed key has a certificate chain rooted at Google's attestation CA, with a public-key pin matching the app's signing cert | Anyone can mint a JSON the server accepts as a "Google-signed" Android device. With `ANDROID_ATTESTATION_ROOT_PEMS` overridden to a test CA, **every** Android request passes regardless of hardware backing.                                                          |
 | 6 | **Play Integrity**          | `GOOGLE_CREDENTIALS=…`, `PLAY_INTEGRITY_MODE=strict`                                                                                     | Google has signed a verdict that the app binary is the real Play Store build on a hardware-backed device                                                  | `relaxed_device` accepts real devices with weak verdicts (nightly/paseo). `relaxed_all` accepts sideloaded / debug APKs. **Production must be `strict`.**                                                                                                              |
 | 7 | **Android CRL**             | `ANDROID_ATTESTATION_CRL_URL=https://android.googleapis.com/attestation/status` (default — DO NOT OVERRIDE)                              | Google publishes a list of revoked attestation certs; the app refreshes the CRL hourly and rejects devices whose cert is on the list                      | Overriding this URL to a non-Google endpoint (or a stale mock) means revoked devices still pass. The default is correct; the only acceptable override is "I'm behind a corporate proxy that allows `android.googleapis.com` and I'm just adding a different DNS name." |
@@ -75,12 +75,14 @@ sometimes gets committed to `.env`.
 
 The relationship between `AUTH_ENABLED` and `ENFORCE_AUTH`:
 
-| `AUTH_ENABLED` | `ENFORCE_AUTH` |  App Attest  | DeviceCheck  | Soft-gate? | Attack                                                                                    |
+| `AUTH_ENABLED` | `ENFORCE_AUTH` |  App Attest  | DeviceCheck* | Soft-gate? | Attack                                                                                    |
 | :------------: | :------------: | :----------: | :----------: | :--------: | ----------------------------------------------------------------------------------------- |
 |    `false`     |    `false`     |     off      |     off      |    n/a     | everyone is unauthenticated                                                               |
 |     `true`     |    `false`     |   advisory   |   advisory   |    yes     | attacker can pass the soft gate; some traffic still authenticated, some not               |
 |     `true`     |     `true`     | **enforced** | **enforced** |     no     | attacker must present a valid App Attest assertion + a fresh DC state — the design intent |
 |    `false`     |     `true`     |     off      |     off      |     no     | contradictory: gate is on but no plugin is mounted; `ENFORCE_AUTH` is meaningless         |
+
+> *DeviceCheck is **[EXPERIMENTAL]** — see § 5.2. The enforced/ advisory rows above assume it is enabled; production deployments must leave it off.
 
 **Production must be `AUTH_ENABLED=true` AND `ENFORCE_AUTH=true`.**
 The other three rows are debug states.
@@ -226,7 +228,7 @@ flag against this table.**
 | ---------------------------------- | ------- | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------ |
 | `AUTH_ENABLED`                     | `false` | **MUST be flipped to `true` for production.** The app accepts unauthenticated requests when off; with `ENFORCE_AUTH=true` (next row) it also requires App Attest.                                      | The auth plugin is unmounted; every request short-circuits past attestation. Open relay.                                                   |
 | `ENFORCE_AUTH`                     | `false` | **MUST be flipped to `true` for production.** The App Attest soft gate is advisory when off; every iOS request gets App Attest verified when on.                                                       | Attacker can pass the soft gate with an invalid attestation; the system _looks_ authenticated but isn't.                                   |
-| `DEVICE_CHECK_IOS_ENABLED`         | `false` | **MUST be flipped to `true` for production iOS clients.** When off, the DeviceCheck middleware is a no-op and `DEVICE_CHECK_*` env vars are unused — every iOS device is treated as clean.             | An attacker with a fleet of jailbroken iPhones can register one username per device, jailbreak-clear the DC state, register again, repeat. |
+
 | `JWT_AUTH_ENFORCED`                | `false` | **MUST be flipped to `true` for production.** When off, `dim-ticket`, `invitation-ticket`, `notify`, `turn`, and `usernames` accept unauthenticated callers.                                           | The named routes accept any unauthenticated caller; the JWT is only attached when the client bothers.                                      |
 | `POC_ENABLED`                      | `false` | **MUST be flipped to `true` when `RATE_LIMIT_PROFILE=shared-nat`.** Defends `/usernames/search` and `/usernames/available` against CGNAT-borne floods.                                                 | One IP behind CGNAT can hammer the public reads at full L7 rate. The origin per-JWT limiter doesn't help unauthenticated endpoints.        |
 | `INVITATION_TICKET_DAEMON_ENABLED` | `true`  | Default on. Required for the invitation-ticket pool to fill.                                                                                                                                           | No tickets issued; the `/invitation-ticket` route returns 404 for every caller.                                                            |
@@ -241,9 +243,10 @@ flag against this table.**
 | `ADMIN_ROUTE_ENABLED`                | `false`               | Mounts `/admin` including `/admin/nuke` (wipes the DB). Keep off unless you're in a controlled incident.                                         | Anyone with the basic-auth credentials (default `admin`/`admin`!) can wipe the database. If on, `ADMIN_PASSWORD` MUST be set to a real value, not the default `Redacted.make('admin')`. |
 | `DEBUG_HEAPDUMP_ENABLED`             | `false`               | Streams a V8 heap snapshot. The description in `config.ts` says it directly: "NEVER enable in production."                                       | The heap snapshot contains every in-memory secret (the `Redacted<string>` wrapper is a runtime optic, not a serialization control). `/debug/heapdump` exposes all of them.              |
 | `DEBUG_SQL_ENABLED`                  | `false`               | `/debug/query` proxies read-only SQL queries. The "read-only" is a server-side promise, not a guard — leaks DB schema and a per-row enumeration. | DB schema + per-row data exfiltration over a single HTTP request.                                                                                                                       |
-| `DEBUG_VOUCHER_ENABLED`              | `false`               | "NEVER enable in production" (per the description in `config.ts`).                                                                               | The debug voucher mints a single-use voucher secret that bypasses normal rate limiting and challenge flow — turning it on in prod means the invariant is broken.                        |
+| `DEBUG_VOUCHER_ENABLED`              | `false`               | "NEVER enable in production" (per the description in `config.ts`).                                                                               | The debug voucher mints a single-use voucher secret that bypasses normal rate limiting and challenge flow — turning it on in prod means the invariant is broken. **(The legitimate offline voucher provisioning script at `scripts/provision-voucher-secrets.ts` is unrelated — it runs locally, not as a route, and is safe to use.)** |
 | `DEBUG_HEAPDUMP_COOLDOWN_SECONDS`    | `3600` (when enabled) | Default is one hour between heap snapshots. Lowering it is a DoS vector (each snapshot blocks the event loop for ~30s).                          | A `5`-second cooldown + 1000 req/min = the event loop is permanently blocked.                                                                                                           |
-| `DOTNS_GATEWAY_ENABLED`              | `false`               | Off until the chain admin grants `dotnsGateway.attestationAllowance` to your attester public key. See § 9.                                       | If on without the on-chain allowance, every `reserve_name` extrinsic fails at the chain side.                                                                                           |
+| `DEVICE_CHECK_IOS_ENABLED`          | `false`               | **[EXPERIMENTAL — do not enable in production.]** The Apple DeviceCheck SDK, server-side enforcement, and two-bit state management are not production-hardened. Requires `DEVICE_CHECK_PRIVATE_KEY`, `DEVICE_CHECK_KEY_ID`, and `APPLE_TEAM_ID`. | When on, the DeviceCheck middleware calls Apple's `queryTwoBits` API on every iOS username registration. Production traffic depends on Apple endpoint availability.                                                                                           |
+| `DOTNS_GATEWAY_ENABLED`              | `false`               | **[EXPERIMENTAL — do not enable in production.]** The dotNS pallet, Chain SDK, and registration flow are not production-stable. Off until the chain admin grants `dotnsGateway.attestationAllowance` to your attester public key. See § 9. | If on without the on-chain allowance, every `reserve_name` extrinsic fails at the chain side.                                                                                           |
 | `PROXY_DELEGATION_ENABLED`           | `false`               | Off until the proxy account is funded and the runtime has been smoke-tested with a single delegated `peopleLite.attest` call.                    | If on with no funded proxy, the chain rejects the extrinsic with `BadOrigin` (the proxy account is not a delegate of the attester).                                                     |
 | `WEB_PUSH_ENABLED`                   | `false`               | Off until you've decided web push is part of the launch.                                                                                         | `VAPID` headers become required for the subscription routes; the public route stops working without a configured key.                                                                   |
 | `REGISTRATION_QUEUE_ENABLED`         | `false`               | Off until the registration queue daemon has been observed completing a full cycle in staging.                                                    | Daemon spawns and starts accepting intakes, but no claim path exists yet.                                                                                                               |
@@ -540,6 +543,7 @@ live stage in turn.
 - [ ] **Both on-chain allowances granted (People + Asset Hub if applicable) and verified on the chain** (§ 8)
 - [ ] **LGTM dashboard renders, every alert rule is present, the contact-point webhook fires** (§ 9)
 - [ ] **Apple / Google / Polkadot credentials are production-tier, not sandbox** (§ 10)
+- [ ] **If the stage serves voucher-authenticated clients: voucher secrets are provisioned** — run `pnpm --filter identity-backend-container provision:vouchers --count <N>` against the stage's DB; confirm the `voucher_secrets` table has `<N>` rows and the QR PNGs are delivered to the enrollment channel
 - [ ] **The `/healthcheck` (or `/readyz`) endpoint on the deployed API responds 200** — first smoke
 - [ ] **An end-to-end registration completes in a non-truncated time** — pull a real device, run the testflight/Play internal build, complete a registration, watch it on-chain
 - [ ] **All 8 alert rules in `infra/observability/grafana/alerting/rules.yaml` evaluate to `OK` for 5 minutes** — visit the Grafana UI, open the alert list, check state
@@ -570,7 +574,7 @@ not have to reverse-engineer the rollback from the source.
 | --------------------------------------- | :-----------------: | :--------------------: | ---------------------------------------------------------------------------------- |
 | `AUTH_ENABLED`                          |        false        |        **true**        | accept only authenticated requests                                                 |
 | `ENFORCE_AUTH`                          |        false        |        **true**        | App Attest on every iOS request                                                    |
-| `DEVICE_CHECK_IOS_ENABLED`              |        false        |        **true**        | DeviceCheck on iOS                                                                 |
+| `DEVICE_CHECK_IOS_ENABLED`              |        false        |       **false**        | **[EXPERIMENTAL — do not enable in production.]** See § 5.2                        |
 | `JWT_AUTH_ENFORCED`                     |        false        |        **true**        | JWT required on dim/invitation/notify/turn/usernames                               |
 | `POC_ENABLED`                           |        false        | **true on shared-nat** | defends public reads against CGNAT                                                 |
 | `APN_PRODUCTION`                        |        false        |        **true**        | APNs production endpoint                                                           |
@@ -583,7 +587,7 @@ not have to reverse-engineer the rollback from the source.
 | `DEBUG_HEAPDUMP_ENABLED`                |        false        |       **false**        | "NEVER enable in production" (config.ts)                                           |
 | `DEBUG_SQL_ENABLED`                     |        false        |       **false**        | leaks DB                                                                           |
 | `DEBUG_VOUCHER_ENABLED`                 |        false        |       **false**        | "NEVER enable in production" (config.ts)                                           |
-| `DOTNS_GATEWAY_ENABLED`                 |        false        |        per-env         | requires on-chain allowance grant                                                  |
+| `DOTNS_GATEWAY_ENABLED`                 |        false        |       **false**        | **[EXPERIMENTAL — do not enable in production.]**                                  |
 | `PROXY_DELEGATION_ENABLED`              |        false        |        per-env         | requires funded proxy + smoke test                                                 |
 | `WEB_PUSH_ENABLED`                      |        false        |        per-env         | requires VAPID keypair + subject                                                   |
 | `REGISTRATION_QUEUE_ENABLED`            |        false        |        per-env         | requires daemon to be observed in staging                                          |
@@ -665,7 +669,7 @@ else
                --query 'tasks[0].containers[0].overrides[0].environment[]' 2>/dev/null \
              | jq -r '.[] | "\(.name)=\(.value)"')
 
-  for f in AUTH_ENABLED ENFORCE_AUTH DEVICE_CHECK_IOS_ENABLED JWT_AUTH_ENFORCED \
+  for f in AUTH_ENABLED ENFORCE_AUTH JWT_AUTH_ENFORCED \
            INVITATION_TICKET_DAEMON_ENABLED FINALIZED_BLOCK_DAEMON_ENABLED \
            APN_PRODUCTION EXPOSE_BUILD_INFO; do
     val=$(echo "$task_env" | grep "^$f=" | cut -d= -f2-)
@@ -686,7 +690,7 @@ else
   esac
 
   for f in ADMIN_ROUTE_ENABLED DEBUG_HEAPDUMP_ENABLED DEBUG_SQL_ENABLED \
-           DEBUG_VOUCHER_ENABLED; do
+           DEBUG_VOUCHER_ENABLED DEVICE_CHECK_IOS_ENABLED; do
     val=$(echo "$task_env" | grep "^$f=" | cut -d= -f2-)
     case "$val" in
       false) ok "$f=$val (must be off)";;
@@ -771,6 +775,11 @@ echo "    People chain: peopleLite.attestationAllowance(<attester>) > 0"
 echo "    Asset Hub (if DOTNS_GATEWAY_ENABLED): dotnsGateway.attestationAllowance(<attester>) > 0"
 echo "  This step requires the chain admin's signature; the operator cannot"
 echo "  run it. The block above is a reminder; flag if you skipped it."
+
+heading "6.5 Voucher provisioning (manual step)"
+echo "  If the stage serves voucher-authenticated clients:"
+echo "    pnpm --filter identity-backend-container provision:vouchers --count <N>"
+echo "  Confirm <N> rows in voucher_secrets and deliver the QR PNGs."
 
 heading "7. LGTM health"
 LGTM_URL=$(pnpm sst output --stage "$STAGE" Grafan* 2>/dev/null | head -1 || echo "")

@@ -72,7 +72,8 @@ pnpm sst secret set ATTESTER_PROXY_PRIVATE_KEY "<128-hex expanded sr25519 key>" 
 # Invitation-pool dedicated signer. Add to infra/secrets.ts and uncomment for dedicated-account deployments.
 # pnpm sst secret set INVITER_POOL_PRIVATE_KEY  "<128-hex expanded sr25519 key>" --stage dev
 pnpm sst secret set WEB_PUSH_VAPID_PRIVATE_KEY "$(bun -e 'console.log(require(\"web-push\").generateVAPIDKeys().privateKey)')" --stage dev
-pnpm sst secret set DEVICE_CHECK_PRIVATE_KEY   "$(cat AuthKey_XXXXX.p8)"             --stage dev   # raw PKCS#8 PEM
+# EXPERIMENTAL — do not enable in production (see docs/production-checklist.md § 5.2)
+# pnpm sst secret set DEVICE_CHECK_PRIVATE_KEY   "$(cat AuthKey_XXXXX.p8)"             --stage dev   # raw PKCS#8 PEM
 pnpm sst secret set ADMIN_PASSWORD             "$(openssl rand -base64 24)"        --stage dev
 pnpm sst secret set DEBUG_PASSWORD             "$(openssl rand -base64 24)"        --stage dev
 pnpm sst secret set APN_PRIVATE_KEY            "$(base64 -w0 -i AuthKey_YYYYY.p8)" --stage dev
@@ -246,6 +247,8 @@ The 11 secrets are stored in AWS Secrets Manager (per-stage, namespaced `identit
 The 12 deployment config keys are read at **deploy** time from `process.env` / `.env` at the repo root (Pulumi auto-loads). The 11 are throw-if-missing; `PEOPLE_NETWORK` defaults to `'westend2'`.
 
 Full procurement walkthrough: [`infra/docs/secrets-procurement.md`](./docs/secrets-procurement.md). **Key gotcha:** `DEVICE_CHECK_PRIVATE_KEY` is a raw PKCS#8 PEM string (verbatim), `APN_PRIVATE_KEY` is base64 of the raw .p8 file bytes. **Opposite formats** — confusing them is the #1 "the app won't start" error.
+
+> **`DEVICE_CHECK_PRIVATE_KEY` and all DeviceCheck env vars are EXPERIMENTAL — do not enable in production.** See [`production-checklist.md § 5.2`](./docs/production-checklist.md#52-must-be-off-false-for-production).
 
 ## Pinned versions
 
