@@ -103,7 +103,7 @@ The App Attest capability is automatically enabled for any Explicit App ID once 
 ```bash
 APPLE_TEAM_ID=A1B2C3D4E5
 APPLE_APP_ATTEST_APP_IDS=["com.example.myapp"]
-DEVICE_CHECK_IOS_ENABLED=true   # must also be enabled for App Attest to gate iOS username registration
+DEVICE_CHECK_IOS_ENABLED=false  # EXPERIMENTAL — do not enable in production
 ENFORCE_AUTH=false              # true = hard gate (blocking), false = soft gate (advisory log)
 ```
 
@@ -111,7 +111,7 @@ ENFORCE_AUTH=false              # true = hard gate (blocking), false = soft gate
 
 ### Verification
 
-1. Set `DEVICE_CHECK_IOS_ENABLED=true` and `ENFORCE_AUTH=true`
+1. **If testing the experimental DeviceCheck feature:** set `DEVICE_CHECK_IOS_ENABLED=true` and `ENFORCE_AUTH=true`
 2. Build and install the iOS app on a **physical device** (App Attest is not available in the iOS Simulator)
 3. Perform a fresh install and attempt to register a username
 4. The app calls `DCAppAttestService.shared.attestKey(...)` to create a key pair, then `generateAssertion(...)` to sign a challenge
@@ -135,6 +135,10 @@ ENFORCE_AUTH=false              # true = hard gate (blocking), false = soft gate
 ---
 
 ## Flow 2: DeviceCheck Setup
+
+> **⚠️ EXPERIMENTAL — Do not enable in production.**
+> The Apple DeviceCheck SDK, server-side enforcement, and two-bit state management are not production-hardened.
+> Production deployments must leave `DEVICE_CHECK_IOS_ENABLED=false`.
 
 ### Prerequisites
 
@@ -199,8 +203,8 @@ openssl ec -in AuthKey_XXXXXXXXXX.p8 -text -noout 2>&1 | head -5
 | `DEVICE_CHECK_PRIVATE_KEY`   | Raw PEM string from the `.p8` file       | `-----BEGIN PRIVATE KEY-----\nMIGHAgE...\n-----END PRIVATE KEY-----` |
 | `DEVICE_CHECK_URL`           | Apple DeviceCheck API URL (default)      | `https://api.devicecheck.apple.com/v1`                               |
 | `APPLE_TEAM_ID`              | From membership page                     | `A1B2C3D4E5`                                                         |
-| `DEVICE_CHECK_IOS_ENABLED`   | `true` to enable                         | `true`                                                               |
-| `DEVICE_CHECK_RESET_ENABLED` | `true` to enable admin reset endpoint    | `true`                                                               |
+| `DEVICE_CHECK_IOS_ENABLED`   | `false` (EXPERIMENTAL)                   | `false`                                                              |
+| `DEVICE_CHECK_RESET_ENABLED` | `false` (must be `false` when DC is off) | `false`                                                              |
 | `ENFORCE_AUTH`               | `true` = hard block, `false` = soft gate | `false`                                                              |
 
 **JSON array format for `DEVICE_CHECK_PRIVATE_KEY`:** Not applicable — this is a multi-line PEM string. Set it in your secrets manager as a raw string or secret block. In `.sst.toml` / SST secrets:
@@ -233,7 +237,7 @@ On `POST /api/v1/usernames` (iOS), the server calls Apple's `queryTwoBits` endpo
 
 ### Verification
 
-1. Enable `DEVICE_CHECK_IOS_ENABLED=true` and `ENFORCE_AUTH=true`
+1. **If testing the experimental DeviceCheck feature:** enable `DEVICE_CHECK_IOS_ENABLED=true` and `ENFORCE_AUTH=true`
 2. On a physical iOS device, register a username (e.g. `alice`)
 3. Confirm registration succeeds — server logs: `DeviceCheck passed, device token available`
 4. Attempt to register the same device with a second username
@@ -252,7 +256,7 @@ On `POST /api/v1/usernames` (iOS), the server calls Apple's `queryTwoBits` endpo
 | `Invalid provider token`                   | JWT signing failed (wrong key, wrong team ID, expired)   | Apple returns HTTP 401; server logs: `DeviceCheck API error: 401` |
 | `DeviceCheck token missing`                | iOS app did not send `Auth-Device-Check-Token` header    | Server logs: `DeviceCheckInactive`                                |
 | `DeviceCheck evaluation failed`            | Apple's API returned an error                            | Server logs: `DeviceCheckFailed: <cause>`                         |
-| All registrations pass silently            | `DEVICE_CHECK_IOS_ENABLED=false` or `ENFORCE_AUTH=false` | Check flags are set to `true`                                     |
+| All registrations pass silently            | `DEVICE_CHECK_IOS_ENABLED=false` (default — use in production) or `ENFORCE_AUTH=false` | For DC testing set both to `true`; for production keep `DEVICE_CHECK_IOS_ENABLED=false` |
 
 ---
 
@@ -463,7 +467,7 @@ APNs push completed with failures topic=com.example.myapp environment=developmen
 | -------------------------- | --------------------- | ------------- | ------- |
 | `APPLE_TEAM_ID`            | string                | Yes           | —       |
 | `APPLE_APP_ATTEST_APP_IDS` | JSON array of strings | Yes           | `[]`    |
-| `DEVICE_CHECK_IOS_ENABLED` | boolean               | Yes (to gate) | `false` |
+| `DEVICE_CHECK_IOS_ENABLED` | boolean               | No (EXPERIMENTAL) | `false` |
 | `ENFORCE_AUTH`             | boolean               | No            | `false` |
 
 ### DeviceCheck
@@ -474,7 +478,7 @@ APNs push completed with failures topic=com.example.myapp environment=developmen
 | `DEVICE_CHECK_KEY_ID`        | string                       | Yes           | —                                      |
 | `DEVICE_CHECK_PRIVATE_KEY`   | PEM string (raw, not base64) | Yes           | —                                      |
 | `DEVICE_CHECK_URL`           | string                       | No            | `https://api.devicecheck.apple.com/v1` |
-| `DEVICE_CHECK_IOS_ENABLED`   | boolean                      | Yes (to gate) | `false`                                |
+| `DEVICE_CHECK_IOS_ENABLED`   | boolean                      | No (EXPERIMENTAL) | `false`                                |
 | `DEVICE_CHECK_RESET_ENABLED` | boolean                      | No            | `false`                                |
 | `ENFORCE_AUTH`               | boolean                      | No            | `false`                                |
 

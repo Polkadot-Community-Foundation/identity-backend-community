@@ -492,5 +492,5 @@ The backend reconnects automatically on disconnect. List endpoints in priority o
 | `ATTESTER_PUBLIC_KEY`        | 64-char hex (no `0x`)               | Flow 1 — 32-byte sr25519 public key                                 |
 | `PEOPLE_RPC_ENDPOINTS`       | JSON array of WSS strings           | Flow 4                                                              |
 | `ASSET_HUB_RPC_ENDPOINTS`    | JSON array of WSS strings           | Flow 3 + Flow 4                                                     |
-| `DOTNS_GATEWAY_ENABLED`      | `true` / `false`                    | Enable only if using Asset Hub dotNS gateway                        |
+| `DOTNS_GATEWAY_ENABLED`      | `false`                             | **[EXPERIMENTAL — do not enable in production.]** Asset Hub dotNS gateway |
 | `PROXY_DELEGATION_ENABLED`   | `true` / `false`                    | Enable only if the attester account differs from the proxy account  |
