@@ -538,6 +538,9 @@ export const makeRefreshRouteWithoutDependencies = Effect.gen(function*() {
         description:
           'Exchange a valid refresh token for a new JWT access token and refresh token pair. The submitted token is permanently revoked — this operation is not idempotent. On failure, returns 401 with a generic error (the response body does not indicate whether the token expired, was not found, or was already used).',
         method: 'post',
+        // NOTE: this sub-app is mounted at `/` (NOT `/token/refresh`) in routes/v1/mod.ts, so the
+        // full path is `/api/v1/auth` + `/token/refresh`. Mounting it at `/token/refresh` there
+        // would double the prefix and 404 the documented endpoint (see refresh-route-mount.test).
         path: '/token/refresh',
         tags: ['v1'],
         request: {

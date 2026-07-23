@@ -75,7 +75,11 @@ export const makeRoutesWithOutDependencies = <
             .route(
               '/auth',
               createOpenAPIHono()
-                .route('/token/refresh', yield* makeRefreshRoute())
+                // Mount at `/` (NOT `/token/refresh`): the refresh route already declares its own
+                // `/token/refresh` path, so mounting it under that prefix too would resolve to
+                // `/auth/token/refresh/token/refresh` and 404 the real `/auth/token/refresh`.
+                // Registered before `.route('/token', …)` so it wins the `/token/refresh` match.
+                .route('/', yield* makeRefreshRoute())
                 .route('/', authRoutes)
                 .use(authPlugin)
                 .route('/token', yield* makeTokenRoute()),
