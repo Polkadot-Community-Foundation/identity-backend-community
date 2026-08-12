@@ -16,11 +16,13 @@ If you are operating the production deployment instead, start at [`infra/README.
 ghcr.io/polkadot-community-foundation/identity-backend-community
 ```
 
-| Tag                       | Meaning                                              |
-| ------------------------- | ---------------------------------------------------- |
-| `main`                    | Moving tag, rebuilt on every push to `main`.         |
-| `<YYYYMMDD-HHMMSS>-<sha>` | Immutable build. Pin this for anything reproducible. |
-| `latest`, `vX.Y.Z`        | Published on GitHub releases.                        |
+| Tag                       | Meaning                                                    |
+| ------------------------- | ---------------------------------------------------------- |
+| `vX.Y.Z`                  | A published release. Pin this.                             |
+| `latest`                  | Moving tag, points at the most recent release.             |
+| `<YYYYMMDD-HHMMSS>-<sha>` | An ad-hoc build published by hand; never becomes `latest`. |
+
+Images are published **on releases only** — merging to `main` does not publish one.
 
 Built by [`.github/workflows/publish-public-image.yml`](../.github/workflows/publish-public-image.yml)
 from the `app-identity` target of the root [`Dockerfile`](../Dockerfile) — the same artifact that
@@ -90,7 +92,7 @@ docker run -d --name identity-backend --network identity-backend -p 8080:8080 \
   -e ANDROID_SIGNING_DIGEST_WEBSITE=$(printf 'b%.0s' {1..64}) \
   -e TURN_SECRET="$(openssl rand -base64 32)" \
   -e TURN_REALM=placeholder \
-  ghcr.io/polkadot-community-foundation/identity-backend-community:main
+  ghcr.io/polkadot-community-foundation/identity-backend-community:latest
 
 curl http://localhost:8080/healthcheck
 # {"uptime":2.2,"responseTime":[2,229370216],"message":"OK","timestamp":1786546961744}

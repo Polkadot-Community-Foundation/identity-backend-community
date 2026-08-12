@@ -3,6 +3,9 @@ name: Publish Public Image
 # Publishes the runtime image (`app-identity`) to GitHub Container Registry so that
 # anyone can run their own identity-backend without GCP credentials or a source build.
 #
+# Releases only — a merge to `main` does not publish. Use workflow_dispatch for an
+# ad-hoc build; that publishes the immutable tag but never moves `latest`.
+#
 # This is a PCF-only workflow: it lives in a NEW file rather than extending
 # `workflow-dispatch-deploy-staging.yml` so that upstream syncs from
 # paritytech/identity-backend-community never conflict with it.
@@ -11,9 +14,6 @@ name: Publish Public Image
 # `.github/workflows/workflow-dispatch-deploy-staging.yml`.
 
 on:
-  push:
-    branches:
-      - main
   release:
     types: [published]
   workflow_dispatch:
@@ -66,12 +66,11 @@ jobs:
           fi
           echo "version=$version" >> "$GITHUB_OUTPUT"
 
-          # A second, moving tag so consumers can track a stream instead of pinning
-          # a timestamp. Releases move `latest`; main pushes move `main`.
+          # Releases additionally move `latest`, so consumers can track the newest
+          # release without pinning a version. Manual dispatch publishes the
+          # immutable tag only — an ad-hoc build must never become `latest`.
           if [ "${EVENT_NAME}" = "release" ]; then
             moving="latest"
-          elif [ "${GITHUB_REF}" = "refs/heads/main" ]; then
-            moving="main"
           else
             moving=""
           fi
