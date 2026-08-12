@@ -16,11 +16,11 @@ If you are operating the production deployment instead, start at [`infra/README.
 ghcr.io/polkadot-community-foundation/identity-backend-community
 ```
 
-| Tag | Meaning |
-| --- | --- |
-| `main` | Moving tag, rebuilt on every push to `main`. |
+| Tag                       | Meaning                                              |
+| ------------------------- | ---------------------------------------------------- |
+| `main`                    | Moving tag, rebuilt on every push to `main`.         |
 | `<YYYYMMDD-HHMMSS>-<sha>` | Immutable build. Pin this for anything reproducible. |
-| `latest`, `vX.Y.Z` | Published on GitHub releases. |
+| `latest`, `vX.Y.Z`        | Published on GitHub releases.                        |
 
 Built by [`.github/workflows/publish-public-image.yml`](../.github/workflows/publish-public-image.yml)
 from the `app-identity` target of the root [`Dockerfile`](../Dockerfile) — the same artifact that
@@ -34,7 +34,7 @@ Currently published for **`linux/amd64` only**. On Apple silicon it runs under e
 You need a PostgreSQL 18 database and a People-chain RPC endpoint. The container runs its own
 migrations on start.
 
-First, the chain account. `PROXY_PRIVATE_KEY` is the sr25519 64-byte *expanded* secret of the
+First, the chain account. `PROXY_PRIVATE_KEY` is the sr25519 64-byte _expanded_ secret of the
 account that submits extrinsics, and `ATTESTER_PUBLIC_KEY` is the attester authority's public key.
 Generate your own:
 
@@ -110,12 +110,12 @@ Chain selection is entirely runtime configuration — you do not need to rebuild
 **as long as the target chain's runtime metadata matches one of the descriptors baked into the
 image** (see the ceiling below).
 
-| Variable | Purpose |
-| --- | --- |
-| `PEOPLE_RPC_ENDPOINTS` | Comma-separated WSS/WS endpoints for the People chain. This is the actual connection target — point it anywhere, including a local node or a Chopsticks fork. |
-| `PEOPLE_CHAIN_DESCRIPTOR` | Which baked PAPI descriptor is used to *encode* calls. One of `previewnet_people`, `paseo_people`, `paseo_people_next`. Defaults to `previewnet_people`. |
-| `PEOPLE_NETWORK` | A **label**, not a connection setting: `westend2`, `polkadot` or `paseo`. Selects the descriptor used by the individuality indexer and tags invitation-ticket state. |
-| `ASSET_HUB_RPC_ENDPOINTS` | Asset Hub endpoints. Only consumed when `DOTNS_GATEWAY_ENABLED=true`. |
+| Variable                  | Purpose                                                                                                                                                              |
+| ------------------------- | -------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `PEOPLE_RPC_ENDPOINTS`    | Comma-separated WSS/WS endpoints for the People chain. This is the actual connection target — point it anywhere, including a local node or a Chopsticks fork.        |
+| `PEOPLE_CHAIN_DESCRIPTOR` | Which baked PAPI descriptor is used to _encode_ calls. One of `previewnet_people`, `paseo_people`, `paseo_people_next`. Defaults to `previewnet_people`.             |
+| `PEOPLE_NETWORK`          | A **label**, not a connection setting: `westend2`, `polkadot` or `paseo`. Selects the descriptor used by the individuality indexer and tags invitation-ticket state. |
+| `ASSET_HUB_RPC_ENDPOINTS` | Asset Hub endpoints. Only consumed when `DOTNS_GATEWAY_ENABLED=true`.                                                                                                |
 
 Pick the descriptor whose runtime the target chain actually matches — a mismatch surfaces as
 decoding failures or `ChainNotSupported`-style errors at the first call, not at startup.
@@ -152,7 +152,7 @@ configurable rather than hardcoded is tracked work, and knowing the concrete tar
 
 ### Forking a live chain locally
 
-If what you want is your own instance against a *fork* of an existing chain, the repository already
+If what you want is your own instance against a _fork_ of an existing chain, the repository already
 has that stack: [`docker/test/e2e/`](../docker/test/e2e/) runs Chopsticks forks of a People chain and
 an Asset Hub, plus a startup container that provisions the proxies and attestation allowances the
 backend expects. See its [README](../docker/test/e2e/README.md).
@@ -166,19 +166,19 @@ default or is inert while its feature flag is off.
 These are the variables the container genuinely refuses to start without — established by
 booting the image and removing them one at a time, not by reading the config schema:
 
-| Variable | Notes |
-| --- | --- |
-| `PORT` | Set to `8080` — see the note above. |
-| `DATABASE_URL` | PostgreSQL connection string. Migrations run automatically at container start. |
-| `PEOPLE_RPC_ENDPOINTS` | See above. |
-| `PEOPLE_NETWORK` | See above. |
-| `PROXY_PRIVATE_KEY` | sr25519 64-byte expanded private key of the submitting account. |
-| `ATTESTER_PUBLIC_KEY` | Hex public key of the attester authority. |
-| `JWT_AUTH_SECRET` | Any strong random string. |
-| `GOOGLE_CREDENTIALS` | Base64 JSON service-account for Play Integrity. Required even with `AUTH_ENABLED=false`. Throwaway value works. |
-| `APN_PRIVATE_KEY`, `APN_KEY_ID`, `APN_TEAM_ID` | Apple Push credentials. Required even though nothing here sends push. Throwaway values work. |
-| `ANDROID_PACKAGE_NAMES`, `ANDROID_SIGNING_DIGEST_PLAYSTORE`, `ANDROID_SIGNING_DIGEST_WEBSITE` | Android attestation config. The two digests are 64 hex chars; any value parses. |
-| `TURN_SECRET`, `TURN_REALM` | See the warning below. |
+| Variable                                                                                      | Notes                                                                                                           |
+| --------------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------- |
+| `PORT`                                                                                        | Set to `8080` — see the note above.                                                                             |
+| `DATABASE_URL`                                                                                | PostgreSQL connection string. Migrations run automatically at container start.                                  |
+| `PEOPLE_RPC_ENDPOINTS`                                                                        | See above.                                                                                                      |
+| `PEOPLE_NETWORK`                                                                              | See above.                                                                                                      |
+| `PROXY_PRIVATE_KEY`                                                                           | sr25519 64-byte expanded private key of the submitting account.                                                 |
+| `ATTESTER_PUBLIC_KEY`                                                                         | Hex public key of the attester authority.                                                                       |
+| `JWT_AUTH_SECRET`                                                                             | Any strong random string.                                                                                       |
+| `GOOGLE_CREDENTIALS`                                                                          | Base64 JSON service-account for Play Integrity. Required even with `AUTH_ENABLED=false`. Throwaway value works. |
+| `APN_PRIVATE_KEY`, `APN_KEY_ID`, `APN_TEAM_ID`                                                | Apple Push credentials. Required even though nothing here sends push. Throwaway values work.                    |
+| `ANDROID_PACKAGE_NAMES`, `ANDROID_SIGNING_DIGEST_PLAYSTORE`, `ANDROID_SIGNING_DIGEST_WEBSITE` | Android attestation config. The two digests are 64 hex chars; any value parses.                                 |
+| `TURN_SECRET`, `TURN_REALM`                                                                   | See the warning below.                                                                                          |
 
 Everything else in `.env.example` has a working default or is inert behind a flag. Notably
 **optional**: `PEOPLE_CHAIN_DESCRIPTOR` (defaults to `previewnet_people`), `AUTH_ENABLED` and
