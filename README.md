@@ -38,6 +38,10 @@ curl http://localhost:8080/healthcheck
 # {"status":"ok"}
 ```
 
+> [!TIP]
+> Want to run your own instance from the published container image — against your own chain —
+> instead of building from source? See [docs/self-hosting.md](./docs/self-hosting.md).
+
 ## Common Commands
 
 ```bash
