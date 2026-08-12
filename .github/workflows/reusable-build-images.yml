@@ -27,6 +27,12 @@ jobs:
     steps:
       - uses: actions/checkout@v5
 
+      # GHCR rejects uppercase path segments, and `github.repository` preserves the
+      # owner's casing. Mirrors the lowercasing cleanup-ghcr.yml already does.
+      - name: Lowercase repository path
+        shell: bash
+        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
+
       - id: image-hash
         uses: ./.github/actions/compute-chopsticks-image-hash
 
@@ -39,7 +45,7 @@ jobs:
       - id: ghcr-check
         name: Check GHCR for existing content-hash tag
         env:
-          GHCR_TAG: ghcr.io/${{ github.repository }}/ci-cache-chopsticks:sha-${{ steps.image-hash.outputs.hash }}
+          GHCR_TAG: ghcr.io/${{ env.REPO_LC }}/ci-cache-chopsticks:sha-${{ steps.image-hash.outputs.hash }}
         run: |
           if docker buildx imagetools inspect "$GHCR_TAG" >/dev/null 2>&1; then
             echo "hit=true" >> "$GITHUB_OUTPUT"
@@ -63,7 +69,7 @@ jobs:
       - if: steps.ghcr-check.outputs.hit != 'true'
         name: Push chopsticks to GHCR
         env:
-          GHCR_TAG: ghcr.io/${{ github.repository }}/ci-cache-chopsticks:sha-${{ steps.image-hash.outputs.hash }}
+          GHCR_TAG: ghcr.io/${{ env.REPO_LC }}/ci-cache-chopsticks:sha-${{ steps.image-hash.outputs.hash }}
         run: |
           docker tag chopsticks:e2e-latest "$GHCR_TAG"
           docker push "$GHCR_TAG"
@@ -79,6 +85,11 @@ jobs:
       GAR_REGISTRY: ${{ inputs.GAR_REGISTRY }}
     steps:
       - uses: actions/checkout@v5
+
+      # See the note in build-chopsticks: GHCR rejects uppercase path segments.
+      - name: Lowercase repository path
+        shell: bash
+        run: echo "REPO_LC=${GITHUB_REPOSITORY,,}" >> "$GITHUB_ENV"
 
       - id: version
         shell: bash
@@ -105,8 +116,8 @@ jobs:
       - id: ghcr-check
         name: Check GHCR for existing content-hash tags
         env:
-          GHCR_APP_IDENTITY: ghcr.io/${{ github.repository }}/ci-cache-app-identity:sha-${{ steps.image-hash.outputs.hash }}
-          GHCR_APP_E2E: ghcr.io/${{ github.repository }}/ci-cache-app-e2e:sha-${{ steps.image-hash.outputs.hash }}
+          GHCR_APP_IDENTITY: ghcr.io/${{ env.REPO_LC }}/ci-cache-app-identity:sha-${{ steps.image-hash.outputs.hash }}
+          GHCR_APP_E2E: ghcr.io/${{ env.REPO_LC }}/ci-cache-app-e2e:sha-${{ steps.image-hash.outputs.hash }}
         run: |
           if docker buildx imagetools inspect "$GHCR_APP_IDENTITY" >/dev/null 2>&1 \
              && docker buildx imagetools inspect "$GHCR_APP_E2E" >/dev/null 2>&1; then
@@ -128,8 +139,8 @@ jobs:
       - if: steps.ghcr-check.outputs.hit != 'true'
         name: Push app images to GHCR
         env:
-          GHCR_APP_IDENTITY: ghcr.io/${{ github.repository }}/ci-cache-app-identity:sha-${{ steps.image-hash.outputs.hash }}
-          GHCR_APP_E2E: ghcr.io/${{ github.repository }}/ci-cache-app-e2e:sha-${{ steps.image-hash.outputs.hash }}
+          GHCR_APP_IDENTITY: ghcr.io/${{ env.REPO_LC }}/ci-cache-app-identity:sha-${{ steps.image-hash.outputs.hash }}
+          GHCR_APP_E2E: ghcr.io/${{ env.REPO_LC }}/ci-cache-app-e2e:sha-${{ steps.image-hash.outputs.hash }}
         run: |
           docker tag "${GAR_REGISTRY}/${IMAGE_NAME}:${VERSION}" "$GHCR_APP_IDENTITY"
           docker tag "${GAR_REGISTRY}/${IMAGE_NAME}:e2e-startup-${VERSION}" "$GHCR_APP_E2E"

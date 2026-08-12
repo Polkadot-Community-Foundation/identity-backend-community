@@ -250,12 +250,12 @@ On `POST /api/v1/usernames` (iOS), the server calls Apple's `queryTwoBits` endpo
 
 ### Common Errors
 
-| Error                                      | Cause                                                    | How to Identify                                                   |
-| ------------------------------------------ | -------------------------------------------------------- | ----------------------------------------------------------------- |
-| `DEVICE_CHECK_PRIVATE_KEY` startup failure | PEM string is malformed (missing `\n`, wrong format)     | Server fails to start; `jose` import error in logs                |
-| `Invalid provider token`                   | JWT signing failed (wrong key, wrong team ID, expired)   | Apple returns HTTP 401; server logs: `DeviceCheck API error: 401` |
-| `DeviceCheck token missing`                | iOS app did not send `Auth-Device-Check-Token` header    | Server logs: `DeviceCheckInactive`                                |
-| `DeviceCheck evaluation failed`            | Apple's API returned an error                            | Server logs: `DeviceCheckFailed: <cause>`                         |
+| Error                                      | Cause                                                                                  | How to Identify                                                                         |
+| ------------------------------------------ | -------------------------------------------------------------------------------------- | --------------------------------------------------------------------------------------- |
+| `DEVICE_CHECK_PRIVATE_KEY` startup failure | PEM string is malformed (missing `\n`, wrong format)                                   | Server fails to start; `jose` import error in logs                                      |
+| `Invalid provider token`                   | JWT signing failed (wrong key, wrong team ID, expired)                                 | Apple returns HTTP 401; server logs: `DeviceCheck API error: 401`                       |
+| `DeviceCheck token missing`                | iOS app did not send `Auth-Device-Check-Token` header                                  | Server logs: `DeviceCheckInactive`                                                      |
+| `DeviceCheck evaluation failed`            | Apple's API returned an error                                                          | Server logs: `DeviceCheckFailed: <cause>`                                               |
 | All registrations pass silently            | `DEVICE_CHECK_IOS_ENABLED=false` (default — use in production) or `ENFORCE_AUTH=false` | For DC testing set both to `true`; for production keep `DEVICE_CHECK_IOS_ENABLED=false` |
 
 ---
@@ -463,24 +463,24 @@ APNs push completed with failures topic=com.example.myapp environment=developmen
 
 ### App Attest
 
-| Key                        | Type                  | Required      | Default |
-| -------------------------- | --------------------- | ------------- | ------- |
-| `APPLE_TEAM_ID`            | string                | Yes           | —       |
-| `APPLE_APP_ATTEST_APP_IDS` | JSON array of strings | Yes           | `[]`    |
+| Key                        | Type                  | Required          | Default |
+| -------------------------- | --------------------- | ----------------- | ------- |
+| `APPLE_TEAM_ID`            | string                | Yes               | —       |
+| `APPLE_APP_ATTEST_APP_IDS` | JSON array of strings | Yes               | `[]`    |
 | `DEVICE_CHECK_IOS_ENABLED` | boolean               | No (EXPERIMENTAL) | `false` |
-| `ENFORCE_AUTH`             | boolean               | No            | `false` |
+| `ENFORCE_AUTH`             | boolean               | No                | `false` |
 
 ### DeviceCheck
 
-| Key                          | Type                         | Required      | Default                                |
-| ---------------------------- | ---------------------------- | ------------- | -------------------------------------- |
-| `APPLE_TEAM_ID`              | string                       | Yes           | —                                      |
-| `DEVICE_CHECK_KEY_ID`        | string                       | Yes           | —                                      |
-| `DEVICE_CHECK_PRIVATE_KEY`   | PEM string (raw, not base64) | Yes           | —                                      |
-| `DEVICE_CHECK_URL`           | string                       | No            | `https://api.devicecheck.apple.com/v1` |
+| Key                          | Type                         | Required          | Default                                |
+| ---------------------------- | ---------------------------- | ----------------- | -------------------------------------- |
+| `APPLE_TEAM_ID`              | string                       | Yes               | —                                      |
+| `DEVICE_CHECK_KEY_ID`        | string                       | Yes               | —                                      |
+| `DEVICE_CHECK_PRIVATE_KEY`   | PEM string (raw, not base64) | Yes               | —                                      |
+| `DEVICE_CHECK_URL`           | string                       | No                | `https://api.devicecheck.apple.com/v1` |
 | `DEVICE_CHECK_IOS_ENABLED`   | boolean                      | No (EXPERIMENTAL) | `false`                                |
-| `DEVICE_CHECK_RESET_ENABLED` | boolean                      | No            | `false`                                |
-| `ENFORCE_AUTH`               | boolean                      | No            | `false`                                |
+| `DEVICE_CHECK_RESET_ENABLED` | boolean                      | No                | `false`                                |
+| `ENFORCE_AUTH`               | boolean                      | No                | `false`                                |
 
 ### APNs
 

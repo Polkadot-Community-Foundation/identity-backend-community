@@ -1,0 +1,125 @@
+name: Publish Public Image
+
+# Publishes the runtime image (`app-identity`) to GitHub Container Registry so that
+# anyone can run their own identity-backend without GCP credentials or a source build.
+#
+# Releases only — a merge to `main` does not publish. Use workflow_dispatch for an
+# ad-hoc build; that publishes the immutable tag but never moves `latest`.
+#
+# This is a PCF-only workflow: it lives in a NEW file rather than extending
+# `workflow-dispatch-deploy-staging.yml` so that upstream syncs from
+# paritytech/identity-backend-community never conflict with it.
+#
+# The internal deploy path (private GAR) is untouched — see
+# `.github/workflows/workflow-dispatch-deploy-staging.yml`.
+
+on:
+  release:
+    types: [published]
+  workflow_dispatch:
+    inputs:
+      tag:
+        description: "Image tag to publish (defaults to <timestamp>-<sha>)"
+        required: false
+        type: string
+
+concurrency:
+  group: publish-public-image
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+  packages: write
+
+jobs:
+  publish:
+    name: Publish to GHCR
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      IMAGE_NAME: ${{ github.event.repository.name }}
+    steps:
+      - uses: actions/checkout@v5
+
+      - name: Resolve registry, version and moving tag
+        id: meta
+        shell: bash
+        env:
+          # Interpolated through env, never straight into the script body, so a
+          # crafted tag name cannot inject shell.
+          INPUT_TAG: ${{ inputs.tag }}
+          RELEASE_TAG: ${{ github.event.release.tag_name }}
+          EVENT_NAME: ${{ github.event_name }}
+        run: |
+          set -euo pipefail
+
+          # GHCR rejects uppercase path segments; the org is mixed-case.
+          owner_lc="${GITHUB_REPOSITORY_OWNER,,}"
+          echo "registry=ghcr.io/${owner_lc}" >> "$GITHUB_OUTPUT"
+
+          if [ -n "${INPUT_TAG}" ]; then
+            version="${INPUT_TAG}"
+          elif [ "${EVENT_NAME}" = "release" ]; then
+            version="${RELEASE_TAG}"
+          else
+            version="$(date -u '+%Y%m%d-%H%M%S')-${GITHUB_SHA::8}"
+          fi
+          echo "version=$version" >> "$GITHUB_OUTPUT"
+
+          # Releases additionally move `latest`, so consumers can track the newest
+          # release without pinning a version. Manual dispatch publishes the
+          # immutable tag only — an ad-hoc build must never become `latest`.
+          if [ "${EVENT_NAME}" = "release" ]; then
+            moving="latest"
+          else
+            moving=""
+          fi
+          echo "moving=$moving" >> "$GITHUB_OUTPUT"
+
+          {
+            echo "version:  $version"
+            echo "registry: ghcr.io/${owner_lc}"
+            echo "moving:   ${moving:-<none>}"
+          } >> "$GITHUB_STEP_SUMMARY"
+
+      - uses: docker/login-action@v4
+        with:
+          registry: ghcr.io
+          username: ${{ github.actor }}
+          password: ${{ secrets.GITHUB_TOKEN }}
+
+      # Reuses the same composite action the GAR deploy uses, pointed at GHCR.
+      # The bake `publish` group contains only `app-identity`, so the e2e startup
+      # image is built but never pushed.
+      - uses: ./.github/actions/build-images
+        with:
+          push: "true"
+          version: ${{ steps.meta.outputs.version }}
+          gar-registry: ${{ steps.meta.outputs.registry }}
+          vcs-ref: ${{ github.sha }}
+
+      - name: Add moving tag
+        if: steps.meta.outputs.moving != ''
+        env:
+          SRC: ${{ steps.meta.outputs.registry }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.version }}
+          DST: ${{ steps.meta.outputs.registry }}/${{ env.IMAGE_NAME }}:${{ steps.meta.outputs.moving }}
+        run: docker buildx imagetools create -t "$DST" "$SRC"
+
+      - name: Summary
+        env:
+          IMAGE: ${{ steps.meta.outputs.registry }}/${{ env.IMAGE_NAME }}
+          VERSION: ${{ steps.meta.outputs.version }}
+          MOVING: ${{ steps.meta.outputs.moving }}
+        run: |
+          set -euo pipefail
+          {
+            echo "### Published"
+            echo ""
+            echo '```'
+            echo "docker pull ${IMAGE}:${VERSION}"
+            [ -n "${MOVING}" ] && echo "docker pull ${IMAGE}:${MOVING}"
+            echo '```'
+            echo ""
+            echo "First publish only: an org owner must set this package's visibility to"
+            echo "**Public** (Packages → ${IMAGE_NAME} → Package settings → Change visibility)."
+          } >> "$GITHUB_STEP_SUMMARY"

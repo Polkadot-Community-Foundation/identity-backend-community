@@ -1489,12 +1489,12 @@ DATABASE_URL="postgres://..." pnpm --filter identity-backend-container provision
 
 ### Output
 
-| File                              | Purpose                                  |
-| :-------------------------------- | :--------------------------------------- |
-| `vouchers/voucher_00.png`         | QR-encoded deep link (`polkadotapp://`)  |
-| `vouchers/voucher_01.png`         | ...one per voucher                       |
-| `vouchers/manifest.csv`           | `index,secret_hash` — the audit log      |
-| `voucher_secrets` DB table        | hash rows — the server-side state        |
+| File                       | Purpose                                 |
+| :------------------------- | :-------------------------------------- |
+| `vouchers/voucher_00.png`  | QR-encoded deep link (`polkadotapp://`) |
+| `vouchers/voucher_01.png`  | ...one per voucher                      |
+| `vouchers/manifest.csv`    | `index,secret_hash` — the audit log     |
+| `voucher_secrets` DB table | hash rows — the server-side state       |
 
 **The QR PNGs are the single point of delivery.** The plaintext secret
 appears in the QR and nowhere else after the script exits. The
@@ -1636,26 +1636,26 @@ something is wrong."
 
 ## Appendix C — Quick-reference for the new stuck points
 
-| #  | Stuck point                                               | Step               | Resolution time  |
-| -- | --------------------------------------------------------- | ------------------ | ---------------- |
-| 23 | No Docker daemon                                          | 7.1                | 10 min           |
-| 24 | No `ecr:PutImage` / `ecr:UploadLayerPart`                 | 7.1                | 5 min            |
-| 25 | `x509: certificate signed by unknown authority`           | 7.1                | 2 min            |
-| 26 | `PEOPLE_RPC_ENDPOINTS` set as bare string                 | 7.2                | 30 s             |
-| 27 | No pool size in startup logs                              | 10 (NEW)           | 5 min (Grafana)  |
-| 28 | Config change ignored by running pods                     | 10                 | 2 min (force)    |
-| 29 | OTel `getaddrinfo ENOTFOUND` for first 2 min              | 10                 | Wait             |
-| 30 | Migrations re-run every deploy                            | 10                 | 10 min           |
-| 31 | Allowance on wrong chain / missing on AH                  | 6.2                | Coordinator      |
-| 32 | EFS mount target in wrong AZ                              | 7.3 (deploy)       | 10 min (retry)   |
-| 33 | `FetchError` misattribution                               | 8 (verify)         | 5 min            |
-| 34 | Cloudflare rule silently disabled                         | 3.3 (CF setup)     | 5 min (verify)   |
-| 35 | `curl` smoke test 403'd by edge UA block                  | 8 (verify)         | 30 s             |
-| 36 | `/admin` exposed at edge? (No — defense in depth)         | (reassurance)      | —                |
-| 37 | Pulumi lock race                                          | 7.4 (deploy)       | 5 min (wait)     |
-| 38 | `shared-nat` per-IP limits not firing as expected         | 8 (verify)         | (by design)      |
-| 39 | 403 vs 401 in testflight build                            | 8 (verify)         | 5 min (OTel)     |
-| 40 | RDS `IAM role ARN value is invalid` (Enhanced Monitoring) | 7.3 (deploy)       | 5 min (diagnose) |
-| 41 | No Cloudflare zone — can I use the ALB URL?               | 7.0 (URL strategy) | 0 min (decision) |
-| 42 | ALB URL prints but `curl` hangs                           | 8 (verify)         | 5 min (diagnose) |
-| 43 | QR deep-link scheme is wrong for my app                   | 10.5               | 1 min (edit const)|
+| #  | Stuck point                                               | Step               | Resolution time    |
+| -- | --------------------------------------------------------- | ------------------ | ------------------ |
+| 23 | No Docker daemon                                          | 7.1                | 10 min             |
+| 24 | No `ecr:PutImage` / `ecr:UploadLayerPart`                 | 7.1                | 5 min              |
+| 25 | `x509: certificate signed by unknown authority`           | 7.1                | 2 min              |
+| 26 | `PEOPLE_RPC_ENDPOINTS` set as bare string                 | 7.2                | 30 s               |
+| 27 | No pool size in startup logs                              | 10 (NEW)           | 5 min (Grafana)    |
+| 28 | Config change ignored by running pods                     | 10                 | 2 min (force)      |
+| 29 | OTel `getaddrinfo ENOTFOUND` for first 2 min              | 10                 | Wait               |
+| 30 | Migrations re-run every deploy                            | 10                 | 10 min             |
+| 31 | Allowance on wrong chain / missing on AH                  | 6.2                | Coordinator        |
+| 32 | EFS mount target in wrong AZ                              | 7.3 (deploy)       | 10 min (retry)     |
+| 33 | `FetchError` misattribution                               | 8 (verify)         | 5 min              |
+| 34 | Cloudflare rule silently disabled                         | 3.3 (CF setup)     | 5 min (verify)     |
+| 35 | `curl` smoke test 403'd by edge UA block                  | 8 (verify)         | 30 s               |
+| 36 | `/admin` exposed at edge? (No — defense in depth)         | (reassurance)      | —                  |
+| 37 | Pulumi lock race                                          | 7.4 (deploy)       | 5 min (wait)       |
+| 38 | `shared-nat` per-IP limits not firing as expected         | 8 (verify)         | (by design)        |
+| 39 | 403 vs 401 in testflight build                            | 8 (verify)         | 5 min (OTel)       |
+| 40 | RDS `IAM role ARN value is invalid` (Enhanced Monitoring) | 7.3 (deploy)       | 5 min (diagnose)   |
+| 41 | No Cloudflare zone — can I use the ALB URL?               | 7.0 (URL strategy) | 0 min (decision)   |
+| 42 | ALB URL prints but `curl` hangs                           | 8 (verify)         | 5 min (diagnose)   |
+| 43 | QR deep-link scheme is wrong for my app                   | 10.5               | 1 min (edit const) |
