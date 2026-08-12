@@ -484,13 +484,13 @@ The backend reconnects automatically on disconnect. List endpoints in priority o
 
 ## Quick reference: env var summary
 
-| Env Var                      | Format                              | Where it comes from                                                 |
-| ---------------------------- | ----------------------------------- | ------------------------------------------------------------------- |
-| `PROXY_PRIVATE_KEY`          | 128-char hex (with or without `0x`) | Flow 1 — expanded sr25519 private key                               |
-| `ATTESTER_PROXY_PRIVATE_KEY` | Same as above                       | Flow 1 — same key, only needed when `PROXY_DELEGATION_ENABLED=true` |
-| `INVITER_POOL_PRIVATE_KEY`   | Same as above                       | Dedicated invitation-pool signer (People chain)                     |
-| `ATTESTER_PUBLIC_KEY`        | 64-char hex (no `0x`)               | Flow 1 — 32-byte sr25519 public key                                 |
-| `PEOPLE_RPC_ENDPOINTS`       | JSON array of WSS strings           | Flow 4                                                              |
-| `ASSET_HUB_RPC_ENDPOINTS`    | JSON array of WSS strings           | Flow 3 + Flow 4                                                     |
+| Env Var                      | Format                              | Where it comes from                                                       |
+| ---------------------------- | ----------------------------------- | ------------------------------------------------------------------------- |
+| `PROXY_PRIVATE_KEY`          | 128-char hex (with or without `0x`) | Flow 1 — expanded sr25519 private key                                     |
+| `ATTESTER_PROXY_PRIVATE_KEY` | Same as above                       | Flow 1 — same key, only needed when `PROXY_DELEGATION_ENABLED=true`       |
+| `INVITER_POOL_PRIVATE_KEY`   | Same as above                       | Dedicated invitation-pool signer (People chain)                           |
+| `ATTESTER_PUBLIC_KEY`        | 64-char hex (no `0x`)               | Flow 1 — 32-byte sr25519 public key                                       |
+| `PEOPLE_RPC_ENDPOINTS`       | JSON array of WSS strings           | Flow 4                                                                    |
+| `ASSET_HUB_RPC_ENDPOINTS`    | JSON array of WSS strings           | Flow 3 + Flow 4                                                           |
 | `DOTNS_GATEWAY_ENABLED`      | `false`                             | **[EXPERIMENTAL — do not enable in production.]** Asset Hub dotNS gateway |
-| `PROXY_DELEGATION_ENABLED`   | `true` / `false`                    | Enable only if the attester account differs from the proxy account  |
+| `PROXY_DELEGATION_ENABLED`   | `true` / `false`                    | Enable only if the attester account differs from the proxy account        |

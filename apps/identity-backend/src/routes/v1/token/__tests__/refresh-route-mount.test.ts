@@ -24,7 +24,7 @@ const post = (app: Hono, path: string) =>
   )
 
 describe('refresh route mount', () => {
-  it.effect('resolves at /auth/token/refresh, not the doubled path, and isn\'t shadowed by /token', () =>
+  it.effect("resolves at /auth/token/refresh, not the doubled path, and isn't shadowed by /token", () =>
     Effect.gen(function*() {
       const refresh = yield* makeRefreshRouteWithoutDependencies
       // Mirror routes/v1/mod.ts: refresh mounted at `/` (its internal path is `/token/refresh`),

@@ -1,8 +1,6 @@
 # syntax=docker/dockerfile:1-labs
 FROM node:24-slim@sha256:242549cd46785b480c832479a730f4f2a20865d61ea2e404fdb2a5c3d3b73ecf AS base
 
-
-
 ENV PNPM_HOME="/pnpm"
 ENV PATH="$PNPM_HOME:$PATH"
 ENV npm_config_store_dir="/pnpm/store"
@@ -65,8 +63,6 @@ RUN touch packages/descriptors/.papi/descriptors/.npmignore
 RUN pnpm deploy --filter=identity-backend-e2e-people-startup-container --prod --legacy /prod/app
 
 FROM oven/bun:1.3.13@sha256:87416c977a612a204eb54ab9f3927023c2a3c971f4f345a01da08ea6262ae30e AS app-identity
-
-
 
 ARG APP_SERVICE=""
 ARG APP_VERSION=""
