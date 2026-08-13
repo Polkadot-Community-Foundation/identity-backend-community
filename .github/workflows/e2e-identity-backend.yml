@@ -172,6 +172,18 @@ jobs:
           done
           echo "IntegreSQL is ready"
 
+      # Must run before vitest: its experimental OpenTelemetry integration builds the
+      # exporter at startup from OTEL_EXPORTER_OTLP_ENDPOINT, long before globalSetup
+      # could start anything. Without a collector already listening on that exact port,
+      # every shard raises a startup/teardown ECONNREFUSED and vitest exits non-zero
+      # even when all tests pass.
+      - name: Start OTEL collector
+        env:
+          E2E_OTEL_CONTAINER: "e2e-otel-collector-${{ matrix.shard }}"
+          E2E_OTEL_VOLUME: "e2e-traces-${{ matrix.shard }}"
+          OTEL_COLLECTOR_HOST_PORT: "4318${{ matrix.shard }}"
+        run: bash docker/test/e2e/otel-collector-up.sh
+
       - name: Start container death-log collector
         run: |
           mkdir -p /tmp/container-death-logs
@@ -222,11 +234,8 @@ jobs:
           OTEL_ENABLED: "true"
           E2E_OTEL_CONTAINER: "e2e-otel-collector-${{ matrix.shard }}"
           E2E_OTEL_VOLUME: "e2e-traces-${{ matrix.shard }}"
-          # OTEL_EXPORTER_OTLP_ENDPOINT is deliberately NOT set: vitest.global-setup.ts
-          # returns early when it is already defined, which skips starting the collector
-          # entirely. otel-collector-up.sh publishes 4318 on an ephemeral host port and
-          # echoes the real endpoint back, which global-setup then exports.
-          # (OTEL_COLLECTOR_HOST_PORT was also set here but is read nowhere.)
+          OTEL_COLLECTOR_HOST_PORT: "4318${{ matrix.shard }}"
+          OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318${{ matrix.shard }}"
           E2E_MEMORY_PROBE: ${{ inputs.enable_memory_probe && 'true' || 'false' }}
           E2E_HEAPDUMP_ENABLED: ${{ inputs.enable_memory_probe && 'true' || 'false' }}
           E2E_HEAPSNAPSHOTS_DIR: apps/identity-backend-e2e/.heapsnapshots

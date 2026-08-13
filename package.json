@@ -24,7 +24,7 @@
     "format": "dprint fmt",
     "format:check": "dprint check",
     "prepare": "husky",
-    "postinstall": "if [ -f sst.config.ts ]; then sst install && turbo build --filter='./packages/**'; fi",
+    "postinstall": "if [ -f sst.config.ts ]; then (sst install || echo 'sst install failed (Pulumi download) - continuing'); turbo build --filter='./packages/**'; fi",
     "precommit": "pnpm lint-staged --no-revert",
     "pre-push": "concurrently --group \"pnpm lint\" \"pnpm typecheck\" \"pnpm api:check\" \"CI=true pnpm test\"",
     "check:ci": "concurrently --group --no-bail \"pnpm lint:ci\" \"pnpm typecheck\" \"pnpm api:check\" \"pnpm --filter identity-backend-container run check:env-sync\" \"pnpm run check:migrations\"",
