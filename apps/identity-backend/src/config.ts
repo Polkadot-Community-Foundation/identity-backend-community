@@ -47,8 +47,17 @@ export const PEOPLE_CHAIN_DESCRIPTOR = Config.literal(
   'paseo_people',
   'paseo_people_next',
 )('PEOPLE_CHAIN_DESCRIPTOR').pipe(
-  Config.withDefault('previewnet_people'),
+  Config.withDefault('paseo_people'),
   Config.withDescription('Descriptor used to encode People chain calls for the configured RPC endpoint'),
+)
+
+export const ASSET_HUB_CHAIN_DESCRIPTOR = Config.literal(
+  'previewnet_asset_hub',
+  'paseo_asset_hub',
+  'paseo_asset_hub_next',
+)('ASSET_HUB_CHAIN_DESCRIPTOR').pipe(
+  Config.withDefault('paseo_asset_hub'),
+  Config.withDescription('Descriptor used to encode Asset Hub calls for the configured RPC endpoint'),
 )
 
 export const WEBSOCKET_HEARTBEAT_TIMEOUT = pipe(
