@@ -222,8 +222,11 @@ jobs:
           OTEL_ENABLED: "true"
           E2E_OTEL_CONTAINER: "e2e-otel-collector-${{ matrix.shard }}"
           E2E_OTEL_VOLUME: "e2e-traces-${{ matrix.shard }}"
-          OTEL_COLLECTOR_HOST_PORT: "4318${{ matrix.shard }}"
-          OTEL_EXPORTER_OTLP_ENDPOINT: "http://localhost:4318${{ matrix.shard }}"
+          # OTEL_EXPORTER_OTLP_ENDPOINT is deliberately NOT set: vitest.global-setup.ts
+          # returns early when it is already defined, which skips starting the collector
+          # entirely. otel-collector-up.sh publishes 4318 on an ephemeral host port and
+          # echoes the real endpoint back, which global-setup then exports.
+          # (OTEL_COLLECTOR_HOST_PORT was also set here but is read nowhere.)
           E2E_MEMORY_PROBE: ${{ inputs.enable_memory_probe && 'true' || 'false' }}
           E2E_HEAPDUMP_ENABLED: ${{ inputs.enable_memory_probe && 'true' || 'false' }}
           E2E_HEAPSNAPSHOTS_DIR: apps/identity-backend-e2e/.heapsnapshots
