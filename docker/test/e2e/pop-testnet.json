@@ -1,6 +1,8 @@
 {
   "endpoint": [
-    "wss://previewnet.substrate.dev/people"
+    "wss://people-paseo.rotko.net",
+    "wss://people-paseo.gatotech.network",
+    "wss://rpc.interweb-it.com/people-paseo"
   ],
   "mock-signature-host": true,
   "allow-unresolved-imports": true,
