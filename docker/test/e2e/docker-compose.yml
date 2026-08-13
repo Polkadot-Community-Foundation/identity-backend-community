@@ -175,6 +175,11 @@ services:
       - PORT=8080
       - REQUEST_SAMPLE_RATE=${REQUEST_SAMPLE_RATE}
       - FINALIZED_BLOCK_TIMEOUT=${FINALIZED_BLOCK_TIMEOUT}
+      # Chopsticks forks a live remote chain and fetches state on demand, so a head
+      # can take ~7s to appear. The app default is 5s, which makes every extrinsic
+      # look 'not included' and retry forever.
+      - TX_INCLUSION_TIMEOUT=${TX_INCLUSION_TIMEOUT:-30 seconds}
+      - PEOPLE_CHAIN_FINALIZATION_TIMEOUT=${PEOPLE_CHAIN_FINALIZATION_TIMEOUT:-180 seconds}
       - AUTH_ENABLED=${AUTH_ENABLED}
       - ATTESTER_PUBLIC_KEY=${ATTESTER_PUBLIC_KEY}
       - REGISTER_USERNAME_BATCH_SIZE=${REGISTER_USERNAME_BATCH_SIZE}
