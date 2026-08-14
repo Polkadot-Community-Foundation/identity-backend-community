@@ -218,10 +218,12 @@ export async function setupTestEnvironment<T extends Hono<any, any, any>>(option
 
     if (composeProfiles.has('turn')) {
       for (const coturn of ['coturn1-1', 'coturn2-1', 'coturn3-1']) {
-        composeEnvironment = composeEnvironment.withWaitStrategy(
-          coturn,
-          Wait.forLogMessage(/INFO: Relay ports initialization done/, 1),
-        )
+        // Not forLogMessage: coturn prints "Relay ports initialization done" ~1.6s
+        // after start, and the log stream can attach after that, so the message is
+        // missed and the wait burns its full timeout on an already-ready container.
+        // Listening on 3478 is the condition the test actually depends on, and is
+        // what the chopsticks containers above already wait for.
+        composeEnvironment = composeEnvironment.withWaitStrategy(coturn, Wait.forListeningPorts())
       }
     }
   }
