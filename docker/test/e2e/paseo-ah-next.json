@@ -1,6 +1,7 @@
 {
   "endpoint": [
-    "wss://previewnet.substrate.dev/asset-hub"
+    "wss://asset-hub-paseo-rpc.n.dwellir.com",
+    "wss://sys.turboflakes.io/asset-hub-paseo"
   ],
   "mock-signature-host": true,
   "allow-unresolved-imports": true,

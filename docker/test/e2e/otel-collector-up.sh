@@ -11,6 +11,16 @@ LOCK="${E2E_OTEL_LOCKFILE:-/tmp/${CONTAINER}.lock}"
 
 log() { echo "otel-collector-up: $*" >&2; }
 
+# Vitest's experimental OpenTelemetry integration builds its exporter at startup,
+# before globalSetup runs, so the endpoint has to be known up front. When the caller
+# pins OTEL_COLLECTOR_HOST_PORT we publish exactly that port; otherwise we fall back
+# to an ephemeral one and echo it back for the caller to export.
+if [ -n "${OTEL_COLLECTOR_HOST_PORT:-}" ]; then
+  PUBLISH="127.0.0.1:${OTEL_COLLECTOR_HOST_PORT}:4318"
+else
+  PUBLISH="127.0.0.1::4318"
+fi
+
 exec 9>"$LOCK"
 flock 9
 if [ "$(docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null || true)" != "running" ]; then
@@ -22,7 +32,7 @@ if [ "$(docker inspect --format '{{.State.Status}}' "$CONTAINER" 2>/dev/null || 
     --network "$NETWORK" \
     -v "$CONFIG:/etc/otelcol/config.yaml:ro" \
     -v "$VOLUME":/traces \
-    -p 127.0.0.1::4318 \
+    -p "$PUBLISH" \
     "$IMAGE" --config=/etc/otelcol/config.yaml >/dev/null
   log "started $CONTAINER"
 else

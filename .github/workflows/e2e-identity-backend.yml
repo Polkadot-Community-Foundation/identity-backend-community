@@ -55,7 +55,12 @@ jobs:
   run-e2e-tests:
     needs: prewarm-compose-images
     runs-on: ubuntu-latest
-    timeout-minutes: 12
+    # Shards land between 9.2 and 12.1 minutes, so the previous 12-minute cap
+    # cancelled the heaviest one and, worse, made the retry below unusable: two
+    # 12-minute attempts cannot fit inside a 12-minute job. Forking a live public
+    # RPC is slow and variable (the startup container needs ~13s just to build its
+    # first block), so a shard does occasionally fail setup and needs that retry.
+    timeout-minutes: 30
     strategy:
       fail-fast: false
       matrix:
@@ -171,6 +176,18 @@ jobs:
             sleep 1
           done
           echo "IntegreSQL is ready"
+
+      # Must run before vitest: its experimental OpenTelemetry integration builds the
+      # exporter at startup from OTEL_EXPORTER_OTLP_ENDPOINT, long before globalSetup
+      # could start anything. Without a collector already listening on that exact port,
+      # every shard raises a startup/teardown ECONNREFUSED and vitest exits non-zero
+      # even when all tests pass.
+      - name: Start OTEL collector
+        env:
+          E2E_OTEL_CONTAINER: "e2e-otel-collector-${{ matrix.shard }}"
+          E2E_OTEL_VOLUME: "e2e-traces-${{ matrix.shard }}"
+          OTEL_COLLECTOR_HOST_PORT: "4318${{ matrix.shard }}"
+        run: bash docker/test/e2e/otel-collector-up.sh
 
       - name: Start container death-log collector
         run: |
